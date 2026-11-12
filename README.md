@@ -231,8 +231,12 @@ All 35 tests ran across the two test steps.
 verified commit `26f90315c1593f92fd6eb5704434090437895fb2` on
 12 November 2026.
 
-The workflow currently tests and builds the image. Image publishing and
-deployment from CI are not configured yet.
+After checks pass on `main`, the workflow publishes the tested image to
+GitHub Container Registry. Pull requests run checks without publishing.
+Staging and production deployments are started manually.
+
+See [Registry releases](docs/runbooks/registry-releases.md) for release
+commands and the first verified deployment from GHCR.
 
 ## Deployments and rollback
 
@@ -250,4 +254,7 @@ Authentication is not implemented. The API is currently published on the local l
 
 Staging-to-production promotion and application rollback have been verified.
 
-CI checks are verified. Image publishing, deployment from CI, and monitoring are planned work.
+CI checks, image publishing, and manual promotion of a registry image
+through staging and production have been verified.
+
+Deployment from CI and monitoring are planned work.
