@@ -90,3 +90,88 @@ def test_database_failure_returns_503_without_internal_details(
 
     assert response.status_code == 503
     assert response.json() == {"detail": "Database unavailable"}
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "limit=0",
+        "limit=101",
+        "limit=abc",
+        "offset=-1",
+        "offset=1000001",
+        "status=invalid",
+    ],
+)
+def test_invalid_list_query_is_rejected(client, query):
+    response = client.get(f"/tickets?{query}")
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param({}, id="missing-status"),
+        pytest.param({"status": "invalid"}, id="invalid-status"),
+        pytest.param({"status": None}, id="null-status"),
+        pytest.param(
+            {"status": "resolved", "title": "Unexpected change"},
+            id="unexpected-field",
+        ),
+    ],
+)
+def test_invalid_status_update_is_rejected(client, payload):
+    response = client.patch("/tickets/1/status", json=payload)
+
+    assert response.status_code == 422
+
+
+@pytest.fixture
+def database_cursor(monkeypatch):
+    connection = MagicMock()
+    connection.__enter__.return_value = connection
+    cursor = connection.cursor.return_value.__enter__.return_value
+
+    monkeypatch.setattr(tickets, "get_connection", lambda: connection)
+    return cursor
+
+
+def test_empty_ticket_list_returns_empty_array(client, database_cursor):
+    database_cursor.fetchall.return_value = []
+
+    response = client.get("/tickets")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_status_update_for_missing_ticket_returns_404(client, database_cursor):
+    database_cursor.fetchone.return_value = None
+
+    response = client.patch(
+        "/tickets/999/status",
+        json={"status": "resolved"},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Ticket not found"}
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "payload"),
+    [
+        ("GET", "/tickets", None),
+        ("PATCH", "/tickets/1/status", {"status": "resolved"}),
+    ],
+)
+def test_list_and_update_database_failures(client, monkeypatch, method, path, payload):
+    def failed_connection():
+        raise psycopg.OperationalError("Private connection details")
+
+    monkeypatch.setattr(tickets, "get_connection", failed_connection)
+
+    response = client.request(method, path, json=payload)
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Database unavailable"}

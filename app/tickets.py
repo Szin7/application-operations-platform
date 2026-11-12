@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Annotated, Literal
 
 import psycopg
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, HTTPException, Path, Query
 from psycopg.rows import dict_row
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
@@ -73,6 +73,69 @@ def get_ticket(
                     WHERE id = %s
                     """,
                 (ticket_id,),
+            )
+            row = cursor.fetchone()
+    except psycopg.OperationalError, psycopg.InterfaceError, ValueError:
+        raise HTTPException(status_code=503, detail="Database unavailable") from None
+
+    if row is None:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    return row
+
+
+class TicketStatusUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: TicketStatus
+
+
+@router.get("", response_model=list[TicketRead])
+def list_tickets(
+    status: Annotated[TicketStatus | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    offset: Annotated[int, Query(ge=0, le=1000000)] = 0,
+):
+    try:
+        with (
+            get_connection() as connection,
+            connection.cursor(row_factory=dict_row) as cursor,
+        ):
+            cursor.execute(
+                """
+                SELECT id, title, description, priority, status, created_at
+                FROM app.tickets
+                WHERE (%s::text IS NULL OR status = %s)
+                ORDER BY created_at DESC, id DESC
+                LIMIT %s OFFSET %s
+                """,
+                (status, status, limit, offset),
+            )
+            rows = cursor.fetchall()
+    except psycopg.OperationalError, psycopg.InterfaceError, ValueError:
+        raise HTTPException(status_code=503, detail="Database unavailable") from None
+
+    return rows
+
+
+@router.patch("/{ticket_id}/status", response_model=TicketRead)
+def update_ticket_status(
+    ticket_id: Annotated[int, Path(ge=1, le=9223372036854775807)],
+    update: TicketStatusUpdate,
+):
+    try:
+        with (
+            get_connection() as connection,
+            connection.cursor(row_factory=dict_row) as cursor,
+        ):
+            cursor.execute(
+                """
+                UPDATE app.tickets
+                SET status = %s
+                WHERE id = %s
+                RETURNING id, title, description, priority, status, created_at
+                """,
+                (update.status, ticket_id),
             )
             row = cursor.fetchone()
     except psycopg.OperationalError, psycopg.InterfaceError, ValueError:
