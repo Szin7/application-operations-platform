@@ -4,7 +4,7 @@ from fastapi import FastAPI, HTTPException
 from app.database import check_database
 from app.tickets import router as tickets_router
 
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.1.1"
 
 app = FastAPI(
     title="Application Operations Platform",
