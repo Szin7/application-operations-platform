@@ -1,0 +1,11 @@
+groups:
+  - name: application-api
+    rules:
+      - alert: ApiScrapeFailed
+        expr: up{job="application-api"} == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'API metrics unavailable in {{ $labels.environment }}'
+          description: 'Prometheus could not scrape {{ $labels.instance }} for at least one minute.'

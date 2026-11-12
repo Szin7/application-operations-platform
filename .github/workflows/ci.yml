@@ -62,6 +62,9 @@ jobs:
       - name: Run code checks and unit tests
         run: ./scripts/check.sh
 
+      - name: Check monitoring configuration and alert rules
+        run: ./scripts/check_monitoring.sh
+
       - name: Prepare the test database
         run: |
           uv run --locked python scripts/bootstrap_db.py

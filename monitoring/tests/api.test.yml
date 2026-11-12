@@ -1,0 +1,49 @@
+rule_files:
+  - /etc/prometheus/rules/api.yml
+
+evaluation_interval: 15s
+
+tests:
+  - name: brief scrape failure
+    interval: 15s
+    input_series:
+      - series: 'up{job="application-api",environment="staging",instance="application-operations-staging-api-1:8000"}'
+        values: '1 0 0 1 1 1 1 1 1'
+      - series: 'up{job="application-api",environment="production",instance="application-operations-production-api-1:8000"}'
+        values: '1 1 1 1 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: ApiScrapeFailed
+        exp_alerts: []
+      - eval_time: 1m30s
+        alertname: ApiScrapeFailed
+        exp_alerts: []
+
+  - name: sustained failure and recovery
+    interval: 15s
+    input_series:
+      - series: 'up{job="application-api",environment="staging",instance="application-operations-staging-api-1:8000"}'
+        values: '1 0 0 0 0 0 1 1 1'
+      - series: 'up{job="application-api",environment="production",instance="application-operations-production-api-1:8000"}'
+        values: '1 1 1 1 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 0s
+        alertname: ApiScrapeFailed
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: ApiScrapeFailed
+        exp_alerts: []
+      - eval_time: 1m15s
+        alertname: ApiScrapeFailed
+        exp_alerts:
+          - exp_labels:
+              job: application-api
+              environment: staging
+              instance: application-operations-staging-api-1:8000
+              severity: warning
+            exp_annotations:
+              summary: API metrics unavailable in staging
+              description: Prometheus could not scrape application-operations-staging-api-1:8000 for at least one minute.
+      - eval_time: 1m30s
+        alertname: ApiScrapeFailed
+        exp_alerts: []

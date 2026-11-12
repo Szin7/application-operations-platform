@@ -269,4 +269,6 @@ through staging and production have been verified.
 
 Prometheus collection and the Grafana dashboard have been verified for staging and production.
 
-Deployment from CI and alerting are planned work.
+A staging outage check confirmed that the scrape alert fires and clears after recovery.
+
+Deployment from CI and alert notifications are planned work.

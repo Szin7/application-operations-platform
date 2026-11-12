@@ -79,9 +79,31 @@ A short traffic burst is averaged across the five-minute query window.
 When there are no requests, error percentages and response-time panels
 can show gaps. A missing value should not be read as a measured zero.
 
+## Scrape alerts
+
+`ApiScrapeFailed` becomes pending when an API scrape fails. It fires
+after the failure continues for one minute and clears after scraping
+recovers. Scrape and evaluation intervals affect when each change appears.
+
+This alert checks access to `/metrics`. It does not check database
+readiness or send notifications.
+
+Run the configuration checks and alert tests:
+
+```bash
+./scripts/check_monitoring.sh
+```
+
+The tests cover a brief failure, a sustained failure, and recovery.
+They also check that a healthy production target does not raise an alert.
+The CI workflow runs the same command.
+
 ## Configuration files
 
-- `monitoring/prometheus.yml`: scrape targets and environment labels.
+- `monitoring/prometheus.yml`: scrape targets, environment labels, and rule files.
+- `monitoring/rules/api.yml`: API scrape alert.
+- `monitoring/tests/api.test.yml`: alert test cases.
+- `scripts/check_monitoring.sh`: configuration checks and alert tests.
 - `monitoring/grafana/provisioning/datasources/prometheus.yml`: Grafana's Prometheus connection.
 - `monitoring/grafana/provisioning/dashboards/application.yml`: dashboard provider.
 - `monitoring/grafana/dashboards/application.json`: panels, queries, and environment selector.
@@ -136,4 +158,12 @@ On 13 November 2026, Nepal time:
 
 Verification used a short burst of ticket-list requests.
 
-Alert rules and notification delivery have not been configured yet.
+A separate recovery check stopped the staging API and confirmed:
+
+- The scrape alert moved from inactive to pending, then firing.
+- Staging recovered with the same container and image.
+- The alert cleared after scraping recovered.
+- Production readiness checks passed throughout the wait loops.
+- The production container was not restarted.
+
+Alert notification delivery has not been configured yet.
