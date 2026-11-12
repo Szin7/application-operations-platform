@@ -165,7 +165,7 @@ RUN_DB_TESTS=1 uv run --env-file .env.test python -m pytest -v
 
 The integration tests verify the database name and account before running. They require an empty test ticket table and remove only the rows they create.
 
-The current suite has 44 tests. The integration tests cover persisted changes, filtering, ordering, and pagination.
+The current suite has 52 tests. The integration tests cover persisted changes, filtering, ordering, and pagination.
 
 Check Python code:
 
@@ -245,8 +245,11 @@ Prometheus collects metrics from staging and production. A provisioned
 Grafana dashboard shows scrape status, request traffic, server errors,
 and response times, with an environment selector.
 
+Alertmanager forwards firing and recovery notifications to a local
+receiver. A staging outage check verified both messages.
+
 See the [monitoring runbook](docs/runbooks/monitoring.md) for setup,
-dashboard details, storage settings, and troubleshooting.
+dashboard details, notification delivery, and troubleshooting.
 
 ## Deployments and rollback
 
@@ -271,4 +274,6 @@ Prometheus collection and the Grafana dashboard have been verified for staging a
 
 A staging outage check confirmed that the scrape alert fires and clears after recovery.
 
-Deployment from CI and alert notifications are planned work.
+Local webhook notification delivery has been verified.
+
+Deployment from CI is planned work. Notifications currently stay on the local machine.

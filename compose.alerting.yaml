@@ -1,0 +1,87 @@
+services:
+  alert-receiver:
+    image: python:3.14-slim
+    user: "10001:10001"
+    command: ["python", "/opt/alert_receiver.py"]
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "127.0.0.1:9095:8080"
+    volumes:
+      - type: bind
+        source: ./scripts/alert_receiver.py
+        target: /opt/alert_receiver.py
+        read_only: true
+        bind:
+          create_host_path: false
+    init: true
+    mem_limit: 64m
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).close()"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  alertmanager:
+    image: prom/alertmanager:v0.35.0
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+      - --cluster.listen-address=
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - type: bind
+        source: ./monitoring/alertmanager.yml
+        target: /etc/alertmanager/alertmanager.yml
+        read_only: true
+        bind:
+          create_host_path: false
+      - alertmanager_data:/alertmanager
+    depends_on:
+      alert-receiver:
+        condition: service_healthy
+    mem_limit: 256m
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - -q
+        - -O
+        - /dev/null
+        - http://127.0.0.1:9093/-/ready
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  alertmanager_data:

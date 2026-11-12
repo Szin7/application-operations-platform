@@ -9,12 +9,14 @@ Prometheus collects metrics from the staging and production APIs every
 | --- | --- | --- |
 | Prometheus | 3.13.5 | http://localhost:9090 |
 | Grafana | 13.3.1 | http://localhost:3000 |
+| Alertmanager | 0.35.0 | http://localhost:9093 |
+| Alert receiver | Python 3.14 | http://localhost:9095/events |
 
-Both services publish their ports on the local loopback address.
+All four services publish their ports on the local loopback address.
 
 The staging and production environments must already be running.
-Prometheus connects to their existing Docker networks. Grafana connects
-to Prometheus through the monitoring network.
+Prometheus connects to their existing Docker networks. Grafana,
+Alertmanager, and the receiver use the monitoring network.
 
 ## Grafana credentials
 
@@ -42,17 +44,17 @@ Changing the file later does not reset an existing account's password.
 Run from the repository root:
 
 ```bash
-docker compose -f compose.monitoring.yaml -f compose.grafana.yaml \
+docker compose -f compose.monitoring.yaml -f compose.grafana.yaml -f compose.alerting.yaml \
   config --quiet
 
-docker compose -f compose.monitoring.yaml -f compose.grafana.yaml \
+docker compose -f compose.monitoring.yaml -f compose.grafana.yaml -f compose.alerting.yaml \
   up -d --wait --wait-timeout 180
 ```
 
 Check the services:
 
 ```bash
-docker compose -f compose.monitoring.yaml -f compose.grafana.yaml ps
+docker compose -f compose.monitoring.yaml -f compose.grafana.yaml -f compose.alerting.yaml ps
 ```
 
 Open the [Application Operations dashboard](http://localhost:3000/d/appops-overview/application-operations).
@@ -85,8 +87,9 @@ can show gaps. A missing value should not be read as a measured zero.
 after the failure continues for one minute and clears after scraping
 recovers. Scrape and evaluation intervals affect when each change appears.
 
-This alert checks access to `/metrics`. It does not check database
-readiness or send notifications.
+This alert checks access to `/metrics`. Database readiness is checked
+separately at `/health/ready`. Prometheus sends firing and resolved alerts
+to Alertmanager, which forwards notifications to the local receiver.
 
 Run the configuration checks and alert tests:
 
@@ -103,7 +106,11 @@ The CI workflow runs the same command.
 - `monitoring/prometheus.yml`: scrape targets, environment labels, and rule files.
 - `monitoring/rules/api.yml`: API scrape alert.
 - `monitoring/tests/api.test.yml`: alert test cases.
-- `scripts/check_monitoring.sh`: configuration checks and alert tests.
+- `scripts/check_monitoring.sh`: Prometheus and Alertmanager checks, plus alert rule tests.
+- `monitoring/alertmanager.yml`: notification grouping and delivery settings.
+- `scripts/alert_receiver.py`: local webhook receiver.
+- `tests/test_alert_receiver.py`: receiver HTTP tests.
+- `compose.alerting.yaml`: Alertmanager and receiver services.
 - `monitoring/grafana/provisioning/datasources/prometheus.yml`: Grafana's Prometheus connection.
 - `monitoring/grafana/provisioning/dashboards/application.yml`: dashboard provider.
 - `monitoring/grafana/dashboards/application.json`: panels, queries, and environment selector.
@@ -116,18 +123,21 @@ provisioned dashboard.
 
 ## Storage and resources
 
-Each monitoring container has a 512 MB memory limit.
+Prometheus and Grafana each have a 512 MB memory limit.
+Alertmanager has 256 MB, and the local receiver has 64 MB.
 
 Prometheus keeps metrics in a named volume, with retention settings of
 two days and 512 MB. Working files and compaction require additional
 disk space, so the retention size is not a hard total-disk limit.
 
 Grafana stores its database in a separate named volume.
+Alertmanager keeps its notification state and silences in another
+named volume.
 
 Stop monitoring while keeping the stored data:
 
 ```bash
-docker compose -f compose.monitoring.yaml -f compose.grafana.yaml stop
+docker compose -f compose.monitoring.yaml -f compose.grafana.yaml -f compose.alerting.yaml stop
 ```
 
 ## Troubleshooting
@@ -135,8 +145,8 @@ docker compose -f compose.monitoring.yaml -f compose.grafana.yaml stop
 Read recent logs:
 
 ```bash
-docker compose -f compose.monitoring.yaml -f compose.grafana.yaml \
-  logs --tail=80 prometheus grafana
+docker compose -f compose.monitoring.yaml -f compose.grafana.yaml -f compose.alerting.yaml \
+  logs --tail=80 prometheus grafana alertmanager alert-receiver
 ```
 
 If a scrape fails, check the target's error in Prometheus and confirm
@@ -166,4 +176,42 @@ A separate recovery check stopped the staging API and confirmed:
 - Production readiness checks passed throughout the wait loops.
 - The production container was not restarted.
 
-Alert notification delivery has not been configured yet.
+## Notification delivery
+
+Alertmanager groups alerts by alert name and environment. It waits
+10 seconds before the first notification for a new group, checks for
+changes every 30 seconds, and repeats unchanged notifications after
+four hours.
+
+Notifications go to `http://alert-receiver:8080/alerts` inside the
+monitoring network. Recovery messages are enabled.
+
+The receiver exposes its latest 100 messages at
+http://localhost:9095/events. This history is held in memory and clears
+when the receiver restarts. Messages also appear in its container logs,
+which rotate at 10 MB with up to three files.
+
+Notifications currently stay on this machine. Email, chat, and paging
+destinations are not configured.
+
+## Verified notification delivery
+
+On 13 November 2026, Nepal time:
+
+- Stopped the staging API and received a firing notification.
+- Restarted staging and received a recovery notification.
+- Matched both messages using the alert fingerprint and start time.
+- Confirmed staging recovered with the same container, image, and version.
+- Confirmed production readiness during the delivery waits.
+- Confirmed the production container was not restarted.
+
+The received messages were saved locally in
+`backups/alert-delivery-20261112T203136Z-349b3468.json`.
+This evidence file is excluded from Git.
+
+Eight receiver tests cover message recording, invalid requests, body
+length limits, and the 100-message history limit. The default Python
+suite passed with 50 tests and two database integration tests skipped.
+
+The monitoring check script validated Prometheus configuration,
+alert rules, and Alertmanager configuration. CI runs the same checks.

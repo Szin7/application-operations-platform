@@ -28,4 +28,22 @@ echo "Checking Prometheus configuration..."
 echo "Testing alert behavior..."
 "${promtool[@]}" test rules /etc/prometheus/tests/api.test.yml
 
+alertmanager_image="prom/alertmanager:v0.35.0"
+
+if ! docker image inspect "$alertmanager_image" >/dev/null 2>&1; then
+    docker pull "$alertmanager_image"
+fi
+
+echo "Checking Alertmanager configuration..."
+docker run --rm --pull never \
+    --network none \
+    --read-only \
+    --tmpfs /tmp \
+    --cap-drop ALL \
+    --security-opt no-new-privileges:true \
+    --mount "type=bind,src=$project_root/monitoring/alertmanager.yml,dst=/etc/alertmanager/alertmanager.yml,readonly" \
+    --entrypoint /bin/amtool \
+    "$alertmanager_image" \
+    check-config /etc/alertmanager/alertmanager.yml
+
 echo "Monitoring checks passed."
