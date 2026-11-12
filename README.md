@@ -239,6 +239,15 @@ Staging and production deployments are started manually.
 See [Registry releases](docs/runbooks/registry-releases.md) for release
 commands and the first verified deployment from GHCR.
 
+## Monitoring
+
+Prometheus collects metrics from staging and production. A provisioned
+Grafana dashboard shows scrape status, request traffic, server errors,
+and response times, with an environment selector.
+
+See the [monitoring runbook](docs/runbooks/monitoring.md) for setup,
+dashboard details, storage settings, and troubleshooting.
+
 ## Deployments and rollback
 
 See [Deployment and application rollback](docs/runbooks/deployment-rollback.md) for release commands and verified results.
@@ -258,4 +267,6 @@ Staging-to-production promotion and application rollback have been verified.
 CI checks, image publishing, and manual promotion of a registry image
 through staging and production have been verified.
 
-Deployment from CI, Prometheus collection, and Grafana dashboards are planned work.
+Prometheus collection and the Grafana dashboard have been verified for staging and production.
+
+Deployment from CI and alerting are planned work.
