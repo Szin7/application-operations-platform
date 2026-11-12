@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Code, database, and image checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    env:
+      POSTGRES_DB: appops_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ci_admin_password
+      APP_DB_HOST: 127.0.0.1
+      APP_DB_PORT: "55433"
+      APP_DB_NAME: appops_test
+      APP_DB_USER: appops_test_app
+      APP_DB_PASSWORD: ci_application_password
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: appops_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_admin_password
+        ports:
+          - 55433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d appops_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.12.23"
+          python-version: "3.14"
+          enable-cache: true
+
+      - name: Run code checks and unit tests
+        run: ./scripts/check.sh
+
+      - name: Prepare the test database
+        run: |
+          uv run --locked python scripts/bootstrap_db.py
+          uv run --locked alembic upgrade head
+
+      - name: Run PostgreSQL integration tests
+        env:
+          RUN_DB_TESTS: "1"
+        run: uv run --locked python -m pytest tests/integration -v
+
+      - name: Build the application image
+        run: |
+          docker build \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --tag application-operations-platform:ci \
+            .
+
+      - name: Check image contents and runtime user
+        run: |
+          docker run --rm -i application-operations-platform:ci python - <<'PY'
+          import importlib.util
+          import os
+          import tomllib
+          from pathlib import Path
+
+          from app.main import APP_VERSION, app
+
+          assert os.getuid() == 10001
+          assert not list(Path("/app").glob(".env*"))
+          assert importlib.util.find_spec("pytest") is None
+          assert importlib.util.find_spec("ruff") is None
+
+          with Path("/app/pyproject.toml").open("rb") as file:
+              project = tomllib.load(file)
+
+          assert APP_VERSION == project["project"]["version"]
+          print("Application:", app.title)
+          print("Version:", APP_VERSION)
+          print("Image checks passed.")
+          PY
