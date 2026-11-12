@@ -208,10 +208,14 @@ Local environment files and development tools are excluded from the application 
 
 The API connects to `db:5432` inside the Compose network. Host-side database tools use `127.0.0.1:55432`.
 
+## Backup and restore
+
+See [Database backup and restore](docs/runbooks/backup-restore.md) for the procedure and verified results.
+
 ## Project status
 
-Local deployment, database migrations, health checks, and automated tests are working.
+Local deployment, database migrations, health checks, automated tests, and database backup and restore have been verified.
 
 Authentication is not implemented. The API is currently published on the local loopback address.
 
-CI/CD, separate staging and production-style environments, monitoring, backup and restore, and deployment rollback are planned work.
+CI/CD, separate staging and production-style environments, monitoring, and deployment rollback are planned work.

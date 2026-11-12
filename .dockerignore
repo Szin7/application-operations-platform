@@ -11,3 +11,4 @@ htmlcov
 tests
 docs
 *.log
+/backups/

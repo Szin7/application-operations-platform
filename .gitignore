@@ -9,3 +9,4 @@ htmlcov/
 .env.*
 !.env.example
 *.log
+/backups/
