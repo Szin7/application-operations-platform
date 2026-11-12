@@ -208,6 +208,10 @@ Local environment files and development tools are excluded from the application 
 
 The API connects to `db:5432` inside the Compose network. Host-side database tools use `127.0.0.1:55432`.
 
+## Deployments and rollback
+
+See [Deployment and application rollback](docs/runbooks/deployment-rollback.md) for release commands and verified results.
+
 ## Backup and restore
 
 See [Database backup and restore](docs/runbooks/backup-restore.md) for the procedure and verified results.
@@ -218,4 +222,6 @@ Local deployment, database migrations, health checks, automated tests, and datab
 
 Authentication is not implemented. The API is currently published on the local loopback address.
 
-CI/CD, separate staging and production-style environments, monitoring, and deployment rollback are planned work.
+Staging-to-production promotion and application rollback have been verified.
+
+CI/CD and monitoring are planned work.
