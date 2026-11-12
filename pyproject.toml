@@ -1,0 +1,16 @@
+[project]
+name = "application-operations-platform"
+version = "0.1.0"
+description = "A service-ticket API with deployment and recovery automation."
+requires-python = ">=3.14,<3.15"
+dependencies = [
+    "fastapi>=0.162.5",
+    "uvicorn>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.16.0",
+    "pytest>=9.2.0",
+    "ruff>=0.17.4",
+]
