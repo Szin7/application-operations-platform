@@ -2,9 +2,10 @@ import psycopg
 from fastapi import FastAPI, HTTPException
 
 from app.database import check_database
+from app.metrics import add_metrics
 from app.tickets import router as tickets_router
 
-APP_VERSION = "0.1.1"
+APP_VERSION = "0.1.2"
 
 app = FastAPI(
     title="Application Operations Platform",
@@ -40,3 +41,4 @@ def version() -> dict[str, str]:
 
 
 app.include_router(tickets_router)
+add_metrics(app)

@@ -81,6 +81,7 @@ curl -i http://localhost:8001/health/ready
 | GET | `/version` | Application version |
 | GET | `/health/live` | Application responsiveness |
 | GET | `/health/ready` | Database connection and query |
+| GET | `/metrics` | Request counts and timings for Prometheus |
 | POST | `/tickets` | Create a ticket |
 | GET | `/tickets` | List tickets |
 | GET | `/tickets/{ticket_id}` | Retrieve a ticket |
@@ -164,7 +165,7 @@ RUN_DB_TESTS=1 uv run --env-file .env.test python -m pytest -v
 
 The integration tests verify the database name and account before running. They require an empty test ticket table and remove only the rows they create.
 
-The current suite has 35 tests. The integration tests cover persisted changes, filtering, ordering, and pagination.
+The current suite has 44 tests. The integration tests cover persisted changes, filtering, ordering, and pagination.
 
 Check Python code:
 
@@ -257,4 +258,4 @@ Staging-to-production promotion and application rollback have been verified.
 CI checks, image publishing, and manual promotion of a registry image
 through staging and production have been verified.
 
-Deployment from CI and monitoring are planned work.
+Deployment from CI, Prometheus collection, and Grafana dashboards are planned work.
