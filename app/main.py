@@ -2,6 +2,7 @@ import psycopg
 from fastapi import FastAPI, HTTPException
 
 from app.database import check_database
+from app.tickets import router as tickets_router
 
 APP_VERSION = "0.1.0"
 
@@ -36,3 +37,6 @@ def readiness() -> dict[str, str]:
 @app.get("/version")
 def version() -> dict[str, str]:
     return {"version": APP_VERSION}
+
+
+app.include_router(tickets_router)
