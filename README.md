@@ -208,6 +208,32 @@ Local environment files and development tools are excluded from the application 
 
 The API connects to `db:5432` inside the Compose network. Host-side database tools use `127.0.0.1:55432`.
 
+## Continuous integration
+
+GitHub Actions runs on pushes to `main`, pull requests, and manual requests.
+
+The workflow uses Python 3.14, locked dependencies, and a fresh PostgreSQL
+test database. It prepares the application account and applies migrations
+before running the database tests.
+
+| Check | First verified result |
+| --- | --- |
+| Python linting and formatting | Passed |
+| Shell script syntax | Passed |
+| Unit test step | 33 passed; 2 integration tests intentionally skipped |
+| PostgreSQL integration step | 2 passed |
+| Docker image build | Passed |
+| Image checks | UID 10001; local environment files, pytest, and Ruff absent; version matched project metadata |
+
+All 35 tests ran across the two test steps.
+
+[First successful CI run](https://github.com/Szin7/application-operations-platform/actions/runs/43276857853)
+verified commit `26f90315c1593f92fd6eb5704434090437895fb2` on
+12 November 2026.
+
+The workflow currently tests and builds the image. Image publishing and
+deployment from CI are not configured yet.
+
 ## Deployments and rollback
 
 See [Deployment and application rollback](docs/runbooks/deployment-rollback.md) for release commands and verified results.
@@ -224,4 +250,4 @@ Authentication is not implemented. The API is currently published on the local l
 
 Staging-to-production promotion and application rollback have been verified.
 
-CI/CD and monitoring are planned work.
+CI checks are verified. Image publishing, deployment from CI, and monitoring are planned work.
