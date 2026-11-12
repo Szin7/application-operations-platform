@@ -1,0 +1,60 @@
+name: application-operations-monitoring
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.13.5
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=2d
+      - --storage.tsdb.retention.size=512MB
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - type: bind
+        source: ./monitoring/prometheus.yml
+        target: /etc/prometheus/prometheus.yml
+        read_only: true
+        bind:
+          create_host_path: false
+      - prometheus_data:/prometheus
+    networks:
+      - default
+      - staging
+      - production
+    mem_limit: 512m
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - /bin/promtool
+        - check
+        - ready
+        - --url=http://127.0.0.1:9090
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  prometheus_data:
+
+networks:
+  default:
+  staging:
+    external: true
+    name: application-operations-staging_default
+  production:
+    external: true
+    name: application-operations-production_default
