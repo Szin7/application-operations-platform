@@ -1,0 +1,103 @@
+name: Local runner check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: appops-deployment
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check local deployment access
+    if: >-
+      github.ref == 'refs/heads/main'
+      && github.event.repository.private == true
+      && github.actor == github.repository_owner
+    runs-on: [self-hosted, Linux, X64, appops-deploy]
+    timeout-minutes: 5
+
+    env:
+      APP_DEPLOY_ROOT: ${{ vars.APP_DEPLOY_ROOT }}
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Check tools and local checkout
+        run: |
+          set -euo pipefail
+
+          test -n "$APP_DEPLOY_ROOT"
+          cd "$APP_DEPLOY_ROOT"
+
+          test "$(git branch --show-current)" = main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git remote get-url origin)" \
+            = "https://github.com/$GITHUB_REPOSITORY.git"
+          test -z "$(git status --porcelain)"
+
+          test "$(id -u)" -ne 0
+          test -r .env.staging
+          test -r .env.production
+
+          printf 'Runner user: %s\n' "$(id -un)"
+          printf 'Source commit: %s\n' "$(git rev-parse HEAD)"
+
+          docker version --format 'Docker server: {{.Server.Version}}'
+          docker compose version
+          uv --version
+          gh --version
+          command -v python3
+
+      - name: Check staging and production
+        run: |
+          python3 - <<'PY'
+          import json
+          import subprocess
+          from urllib.request import urlopen
+
+          for environment, port in (
+              ("staging", 8002),
+              ("production", 8003),
+          ):
+              container = f"application-operations-{environment}-api-1"
+
+              state = subprocess.check_output(
+                  [
+                      "docker", "inspect", "--format",
+                      "{{.State.Running}} {{.State.Health.Status}}",
+                      container,
+                  ],
+                  text=True,
+                  timeout=15,
+              ).strip()
+
+              assert state == "true healthy", (environment, state)
+
+              base_url = f"http://127.0.0.1:{port}"
+
+              with urlopen(base_url + "/health/ready", timeout=10) as response:
+                  assert response.status == 200
+                  readiness = json.load(response)
+
+              assert readiness == {"status": "ready"}, (
+                  environment, readiness
+              )
+
+              with urlopen(base_url + "/version", timeout=10) as response:
+                  assert response.status == 200
+                  version = json.load(response).get("version")
+
+              assert isinstance(version, str) and version, environment
+
+              print(f"{environment}: healthy, ready, version {version}")
+
+          print("Local runner checks passed.")
+          PY
+
+          printf 'Local runner checks passed.\n' >> "$GITHUB_STEP_SUMMARY"
