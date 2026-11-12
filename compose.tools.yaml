@@ -1,0 +1,23 @@
+services:
+  setup:
+    image: application-operations-platform:dev
+    profiles:
+      - tools
+    environment:
+      APP_DB_HOST: db
+      APP_DB_PORT: "5432"
+      APP_DB_NAME: ${APP_DB_NAME:?Set APP_DB_NAME}
+      APP_DB_USER: ${APP_DB_USER:?Set APP_DB_USER}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command: ["python", "scripts/bootstrap_db.py"]
