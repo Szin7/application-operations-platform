@@ -1,4 +1,7 @@
-from fastapi import FastAPI
+import psycopg
+from fastapi import FastAPI, HTTPException
+
+from app.database import check_database
 
 APP_VERSION = "0.1.0"
 
@@ -16,6 +19,18 @@ def home() -> dict[str, str]:
 @app.get("/health/live")
 def liveness() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/health/ready")
+def readiness() -> dict[str, str]:
+    try:
+        check_database()
+    except psycopg.Error, ValueError:
+        raise HTTPException(
+            status_code=503,
+            detail="Database unavailable",
+        ) from None
+    return {"status": "ready"}
 
 
 @app.get("/version")
