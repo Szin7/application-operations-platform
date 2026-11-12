@@ -1,6 +1,6 @@
 services:
   setup:
-    image: application-operations-platform:dev
+    image: ${APP_IMAGE:-application-operations-platform:dev}
     profiles:
       - tools
     environment:

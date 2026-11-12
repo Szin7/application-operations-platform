@@ -19,7 +19,7 @@ services:
       start_period: 10s
 
   api:
-    image: application-operations-platform:dev
+    image: ${APP_IMAGE:-application-operations-platform:dev}
     build:
       context: .
     environment:
