@@ -67,7 +67,7 @@ WSL mount regression and upstream filesystem tests, and builds the binary.
 The check confirms the non-root image user and reported version using an
 isolated container without host mounts or networking. It does not restart
 the running exporter. The same commands are included in CI before image
-publishing; the first CI run for this integration is still pending.
+publishing. The first integration run passed for commit `1ecf2ff`: [CI run 43423286458](https://github.com/Szin7/application-operations-platform/actions/runs/43423286458).
 
 CI does not prove visibility into the user's WSL host. The live checks
 compare exporter values with WSL, require fresh container samples, and

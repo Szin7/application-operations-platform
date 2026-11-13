@@ -14,13 +14,13 @@ ran locally in WSL.
 
 | Check | Recorded result | Evidence |
 | --- | --- | --- |
-| CI and image publishing | Passed for Ansible integration commit `598ba82` | [Run 43370353727](https://github.com/Szin7/application-operations-platform/actions/runs/43370353727) |
+| CI and image publishing | Passed for monitoring integration commit `1ecf2ff` | [Run 43423286458](https://github.com/Szin7/application-operations-platform/actions/runs/43423286458) |
 | CI for the deployed release | Passed for release `a56088c1b7bb` | [Run 43302633612](https://github.com/Szin7/application-operations-platform/actions/runs/43302633612) |
 | Staging deployment | Exact release verified; production not restarted | [Run 43344606433](https://github.com/Szin7/application-operations-platform/actions/runs/43344606433) |
 | Production promotion | Backup created; original ticket preserved; staging not restarted | [Run 43347528825](https://github.com/Szin7/application-operations-platform/actions/runs/43347528825) |
 | Invalid promotion | Expected rejection before backup and deployment | [Run 43351535975](https://github.com/Szin7/application-operations-platform/actions/runs/43351535975) |
 
-The CI run for Ansible integration commit `598ba82` did not deploy a new application release.
+The CI run for monitoring integration commit `1ecf2ff` did not deploy a new application release.
 The recorded staging and production deployments used release
 `a56088c1b7bb`, application version `0.1.2`.
 
@@ -126,8 +126,29 @@ Evidence was saved locally in
 `backups/dependency-audit-20261113T052751Z-HgBtxd`. This is a point-in-time
 check of the checkout's lockfile, not a scan of the running container images.
 See [Python dependency checks](runbooks/dependency-checks.md) for the CI gate,
-report files, and coverage limits. The baseline preceded the reusable CI
-check; a later workflow run is needed to verify that integration on GitHub.
+report files, and coverage limits. The dependency audit subsequently passed
+in [CI run 43423286458](https://github.com/Szin7/application-operations-platform/actions/runs/43423286458)
+for commit `1ecf2ff`.
+
+## Staging startup failure and recovery
+
+On 13 November 2026, a controlled startup configuration fault was applied only
+to the staging API using saved release `a56088c1b7bb`. The command exited with
+code 42, and both staging routes became unavailable. The existing rollback
+script restored the saved image, and all four readiness routes passed.
+
+The staging migration revision and all staging ticket rows were unchanged.
+Protected containers and production settings were unchanged, and the original
+production ticket matched at the sampled protection checks. The local code
+check passed: 103 tests passed and two opt-in database integration tests were
+skipped.
+
+The drill saved a `passed` result at
+`backups/staging-recovery-20261113T123703731666Z/evidence.json`.
+See the [staging recovery runbook](runbooks/staging-recovery.md#verified-exercise--13-november-2026)
+for the procedure, recovery behavior, and verified scope. The failure used a
+temporary startup command on the existing image; it was not a GitHub Actions
+image-promotion test. Raw records remain outside Git.
 
 ## Infrastructure monitoring sequence
 
@@ -164,8 +185,10 @@ Key local records:
 These raw records stay local. See the [infrastructure runbook](runbooks/infrastructure-monitoring.md)
 for startup and verification, and the [alert runbook](runbooks/monitoring-alerts.md)
 for the distinction between synthetic resource tests and live delivery drills.
-The monitoring integration's first CI run is pending; the local results
-above are not a claim that GitHub has already checked this change.
+The monitoring integration passed [CI run 43423286458](https://github.com/Szin7/application-operations-platform/actions/runs/43423286458)
+for commit `1ecf2ff`. Checks and image publishing completed successfully,
+including the fresh exporter build and PostgreSQL integration tests.
+This did not redeploy the running applications.
 
 ## Infrastructure dashboard screenshots
 

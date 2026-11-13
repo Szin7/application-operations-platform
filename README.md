@@ -17,11 +17,12 @@ The linked Actions deployments ran while the repository was private.
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| CI and image publishing | Passed for Ansible integration commit `598ba82` | [CI run](https://github.com/Szin7/application-operations-platform/actions/runs/43370353727) |
+| CI and image publishing | Passed for monitoring integration commit `1ecf2ff` | [CI run](https://github.com/Szin7/application-operations-platform/actions/runs/43423286458) |
 | Staging deployment | Verified release; production was not restarted | [Staging run](https://github.com/Szin7/application-operations-platform/actions/runs/43344606433) |
 | Production promotion | Backup created; original ticket preserved | [Production run](https://github.com/Szin7/application-operations-platform/actions/runs/43347528825) |
 | Invalid promotion | Expected rejection; backup and deployment skipped | [Intentional failed run](https://github.com/Szin7/application-operations-platform/actions/runs/43351535975) |
 | Application rollback | Previous image restored; original ticket preserved | [Rollback results](docs/runbooks/deployment-rollback.md#verified-exercise-12-november-2026) |
+| Staging startup recovery | Intended exit 42 confirmed; saved image restored; staging data preserved | [Recovery drill](docs/runbooks/staging-recovery.md#verified-exercise--13-november-2026) |
 | Production backup recovery | Separate test database; migration, application access, and ticket checked | [Recovery results](docs/runbooks/backup-restore.md#verified-production-backup-recovery) |
 | Monitoring | Both API scrape targets UP; traffic and response metrics visible | [Dashboard screenshots](docs/evidence.md#monitoring-screenshots) |
 | Nginx reverse proxy | Both environments passed routing, request-size, and runtime checks | [Proxy results](docs/runbooks/reverse-proxy.md#verified-integration--13-november-2026) |
@@ -248,7 +249,7 @@ RUN_DB_TESTS=1 uv run --env-file .env.test python -m pytest -v
 
 The integration tests verify the database name and account before running. They require an empty test ticket table and remove only the rows they create.
 
-The current suite has 79 tests. The integration tests cover persisted changes, filtering, ordering, and pagination.
+The current suite has 105 tests. The integration tests cover persisted changes, filtering, ordering, and pagination.
 
 Check Python code:
 
@@ -310,7 +311,7 @@ before running the database tests.
 | Image checks | UID 10001; local environment files, pytest, and Ruff absent; version matched project metadata |
 
 All 35 tests in that first CI run ran across the two test steps. The current
-suite described above has 79 tests.
+suite includes additional operational recovery tests.
 
 [First successful CI run](https://github.com/Szin7/application-operations-platform/actions/runs/43276857853)
 verified commit `26f90315c1593f92fd6eb5704434090437895fb2` on
@@ -353,6 +354,8 @@ place, so new deployment jobs skip in this public repository. See
 the execution scope, historical procedure, and verified runs.
 
 See [Deployment and application rollback](docs/runbooks/deployment-rollback.md) for release commands and verified results.
+The [staging recovery drill](docs/runbooks/staging-recovery.md) covers a
+controlled startup configuration failure and restoration of the saved image.
 
 ## Ansible deployments
 
@@ -388,6 +391,8 @@ Verified locally:
 - CI checks, database integration tests, and image publishing.
 - Manual staging deployment and production promotion through Actions in the private lab.
 - Application rollback and preservation of the original production ticket.
+- Controlled staging startup failure and rollback, with staging data preserved
+  and production protection checks passing.
 - Rejection of an invalid promotion before backup or deployment.
 - Production backup recovery into a separate test database, including
   application access, migration revision, and ticket comparison.
@@ -398,16 +403,7 @@ Verified locally:
 - WSL CPU, memory, and filesystem comparisons, plus resource metrics for 16 lab containers.
 - Four direct/proxied readiness probes, ten infrastructure dashboard queries, and two additional alert-delivery drills.
 
-### Limits
+### Scope
 
-Staging, production, monitoring, and backups share one laptop. This lab
-does not demonstrate high availability or recovery after losing the laptop.
-
-Authentication is not implemented. The API uses local loopback addresses.
-Local deployments and rollback are manual. Actions deployment jobs are gated
-off in this public repository. Historical release lookup depends on retained
-GitHub Actions logs.
-
-Backups are local and manually triggered; off-machine storage is not
-configured. Recovery was checked using one demonstration ticket without
-switching production to the recovered database. Notifications remain local.
+This is a local lab on one laptop. See [Scope and limitations](docs/limitations.md)
+for deployment, recovery, and monitoring boundaries.
