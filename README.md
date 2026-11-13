@@ -7,7 +7,8 @@ rollback, and database backup recovery.
 
 Docker Compose runs the services. Alembic tracks schema changes, a restricted
 database account serves the API, and Prometheus, Grafana, and Alertmanager
-provide monitoring and local notifications.
+provide monitoring and local notifications. Nginx fronts each environment,
+and Ansible coordinates local deployment checks, production backup, and verification.
 
 ## Verified results
 
@@ -16,7 +17,7 @@ The linked Actions deployments ran while the repository was private.
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| CI and image publishing | Passed for documentation commit `e024a55` | [CI run](https://github.com/Szin7/application-operations-platform/actions/runs/43354287536) |
+| CI and image publishing | Passed for Nginx integration commit `9075ca3` | [CI run](https://github.com/Szin7/application-operations-platform/actions/runs/43366053550) |
 | Staging deployment | Verified release; production was not restarted | [Staging run](https://github.com/Szin7/application-operations-platform/actions/runs/43344606433) |
 | Production promotion | Backup created; original ticket preserved | [Production run](https://github.com/Szin7/application-operations-platform/actions/runs/43347528825) |
 | Invalid promotion | Expected rejection; backup and deployment skipped | [Intentional failed run](https://github.com/Szin7/application-operations-platform/actions/runs/43351535975) |
@@ -24,6 +25,7 @@ The linked Actions deployments ran while the repository was private.
 | Production backup recovery | Separate test database; migration, application access, and ticket checked | [Recovery results](docs/runbooks/backup-restore.md#verified-production-backup-recovery) |
 | Monitoring | Both API scrape targets UP; traffic and response metrics visible | [Dashboard screenshots](docs/evidence.md#monitoring-screenshots) |
 | Nginx reverse proxy | Both environments passed routing, request-size, and runtime checks | [Proxy results](docs/runbooks/reverse-proxy.md#verified-integration--13-november-2026) |
+| Ansible deployments | Same-release rehearsals passed in staging and production; backup before production deployment | [Ansible results](docs/runbooks/ansible-deployments.md#verified-rehearsals--13-november-2026) |
 
 **Public repository status:** CI checks and image publishing remain enabled.
 The staging, production, and runner-check jobs require a private repository,
@@ -55,6 +57,9 @@ The diagram shows the tested lab deployment flow. Staging and production
 are separate Compose projects on one laptop. Production promotion reuses
 the image verified in staging and creates a database backup before deployment.
 The Actions deployment jobs are gated off in this public repository.
+For current local operation, Ansible calls the existing deployment and backup
+scripts and verifies their results. Its inventory represents the single WSL
+host; see the [Ansible runbook](docs/runbooks/ansible-deployments.md).
 
 ## Local HTTP access
 
@@ -339,6 +344,17 @@ the execution scope, historical procedure, and verified runs.
 
 See [Deployment and application rollback](docs/runbooks/deployment-rollback.md) for release commands and verified results.
 
+## Ansible deployments
+
+Ansible was added after the Nginx integration. The playbooks check the
+prepared lab and selected image, require a matching healthy staging release
+before production, create a production backup, and verify the result.
+They reuse the existing bootstrap and migration procedure.
+
+The first staging and production runs rehearsed release `a56088c1b7bb`
+(version `0.1.2`). See [Deploy with Ansible](docs/runbooks/ansible-deployments.md)
+for prerequisites, commands, check-mode behavior, and recorded results.
+
 ## Backup and restore
 
 See [Database backup and restore](docs/runbooks/backup-restore.md) for the procedure and verified results.
@@ -356,6 +372,7 @@ Verified locally:
   application access, migration revision, and ticket comparison.
 - Prometheus collection, Grafana, and local firing and recovery notifications.
 - Nginx routing, application error forwarding, request-size limits, and runtime restrictions.
+- Ansible preflight and same-release staging/production deployment rehearsals.
 
 ### Limits
 

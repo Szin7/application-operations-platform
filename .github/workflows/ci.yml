@@ -68,6 +68,12 @@ jobs:
       - name: Check Nginx proxy configuration
         run: ./scripts/check_proxy.sh
 
+      - name: Check Ansible playbook syntax
+        run: >-
+          uv run --no-project --python 3.14
+          --with ansible-core==2.20.1
+          bash scripts/check_ansible.sh
+
       - name: Prepare the test database
         run: |
           uv run --locked python scripts/bootstrap_db.py

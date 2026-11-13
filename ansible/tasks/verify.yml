@@ -1,0 +1,75 @@
+---
+- name: Verify the running target image and health
+  ansible.builtin.command:
+    argv:
+      - docker
+      - inspect
+      - --format
+      - "{{ '{{.Image}} {{.State.Running}} {{.State.Health.Status}}' }}"
+      - "application-operations-{{ target_environment }}-api-1"
+  register: deployed_image
+  changed_when: false
+  failed_when: >-
+    deployed_image.rc != 0 or deployed_image.stdout != release_id + ' true healthy'
+
+- name: Wait for direct and proxied readiness in both environments
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ item }}/health/ready"
+    status_code: 200
+    return_content: true
+    follow_redirects: none
+    use_proxy: false
+    use_netrc: false
+    timeout: 5
+  loop: [8002, 8003, 8082, 8083]
+  register: deployed_readiness
+  until:
+    - deployed_readiness.status | default(0) == 200
+    - "deployed_readiness.json | default({}) == {'status': 'ready'}"
+  retries: 12
+  delay: 2
+  changed_when: false
+
+- name: Check the deployed version through the direct API and proxy
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ item }}/version"
+    status_code: 200
+    return_content: true
+    follow_redirects: none
+    use_proxy: false
+    use_netrc: false
+    timeout: 5
+  loop: "{{ environment_ports[target_environment] }}"
+  register: deployed_version
+  failed_when: >-
+    deployed_version.status | default(0) != 200 or
+    deployed_version.json | default({}) != {'version': release_version}
+  changed_when: false
+
+- name: Verify the saved release without displaying environment contents
+  ansible.builtin.command:
+    argv:
+      - uv
+      - run
+      - --locked
+      - python
+      - -c
+      - >-
+        import sys; from dotenv import dotenv_values;
+        settings = dotenv_values(sys.argv[1], interpolate=False);
+        assert settings.get('APP_IMAGE') == sys.argv[2], 'Saved release mismatch';
+        print('Saved release matched')
+      - ".env.{{ target_environment }}"
+      - "{{ release_image }}"
+    chdir: "{{ project_root }}"
+  changed_when: false
+  no_log: true
+
+- name: Verify the protected containers stayed unchanged and healthy
+  ansible.builtin.command:
+    argv: >-
+      {{ ['docker', 'inspect', '--format', container_state_format]
+      + protected_containers }}
+  register: protected_after
+  changed_when: false
+  failed_when: protected_after.rc != 0 or protected_after.stdout != protected_before.stdout

@@ -28,6 +28,10 @@ For local deployment and rollback, use the
 on the repository being private. They still require the local environment,
 credentials, images, and database setup documented there.
 
+[Deploy with Ansible](ansible-deployments.md) provides the later local
+orchestration of those scripts, including preflight, production backup,
+and post-deployment verification. It does not change the Actions guards.
+
 The [evidence walkthrough](../evidence.md) can be reviewed without running
 the deployment workflows.
 

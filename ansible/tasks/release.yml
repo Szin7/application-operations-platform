@@ -1,0 +1,104 @@
+---
+- name: Inspect the selected image ID and source revision
+  ansible.builtin.command:
+    argv:
+      - docker
+      - image
+      - inspect
+      - --format
+      - >-
+        {{ '{{.Id}} {{index .Config.Labels "org.opencontainers.image.revision"}}' }}
+      - "{{ release_image }}"
+  register: release_metadata
+  changed_when: false
+  check_mode: false
+
+- name: Require the source revision to match the release tag
+  ansible.builtin.assert:
+    that:
+      - release_metadata.stdout.split() | length == 2
+      - release_metadata.stdout.split()[0] is match('^sha256:[0-9a-f]{64}$')
+      - release_metadata.stdout.split()[1] is match('^[0-9a-f]{40}$')
+      - release_metadata.stdout.split()[1][:12] == release_image.split(':')[1]
+    fail_msg: The local image source revision must match its release tag.
+
+- name: Keep the verified image identity
+  ansible.builtin.set_fact:
+    release_id: "{{ release_metadata.stdout.split()[0] }}"
+    release_commit: "{{ release_metadata.stdout.split()[1] }}"
+
+- name: Read the application version from the selected image
+  ansible.builtin.command:
+    argv:
+      - docker
+      - run
+      - --rm
+      - --pull
+      - never
+      - --network
+      - none
+      - --read-only
+      - --cap-drop
+      - ALL
+      - --security-opt
+      - no-new-privileges:true
+      - --user
+      - '10001:10001'
+      - --memory
+      - 128m
+      - --pids-limit
+      - '64'
+      - "{{ release_id }}"
+      - python
+      - -c
+      - 'from app.main import APP_VERSION; print(APP_VERSION)'
+  register: image_version
+  changed_when: false
+  check_mode: false
+
+- name: Require a valid application version
+  ansible.builtin.assert:
+    that:
+      - image_version.stdout is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+
+- name: Keep the expected application version
+  ansible.builtin.set_fact:
+    release_version: "{{ image_version.stdout }}"
+
+- name: Inspect the running staging image and health
+  ansible.builtin.command:
+    argv:
+      - docker
+      - inspect
+      - --format
+      - "{{ '{{.Image}} {{.State.Running}} {{.State.Health.Status}}' }}"
+      - application-operations-staging-api-1
+  register: staging_release
+  changed_when: false
+  check_mode: false
+  when: target_environment == 'production'
+
+- name: Require the same image running healthy in staging before production
+  ansible.builtin.assert:
+    that:
+      - staging_release.stdout == release_id + ' true healthy'
+    fail_msg: Deploy and verify this exact image in staging before production.
+  when: target_environment == 'production'
+
+- name: Check the staging version before production backup
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ item }}/version"
+    status_code: 200
+    return_content: true
+    follow_redirects: none
+    use_proxy: false
+    use_netrc: false
+    timeout: 5
+  loop: [8002, 8082]
+  register: staging_version
+  failed_when: >-
+    staging_version.status | default(0) != 200 or
+    staging_version.json | default({}) != {'version': release_version}
+  changed_when: false
+  check_mode: false
+  when: target_environment == 'production'

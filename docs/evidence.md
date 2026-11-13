@@ -6,20 +6,21 @@ no public application or Grafana endpoint.
 
 CI checks and image publishing remain enabled in the public repository.
 The Actions deployment and runner-check jobs are intentionally gated off
-by their private-repository condition. The deployment runs below were
-completed while the repository was private.
+by their private-repository condition. The Actions deployment runs below
+were completed while the repository was private. The later Ansible rehearsals
+ran locally in WSL.
 
 ## Delivery checks
 
 | Check | Recorded result | Evidence |
 | --- | --- | --- |
-| CI and image publishing | Passed for commit `e024a55` | [Run 43354287536](https://github.com/Szin7/application-operations-platform/actions/runs/43354287536) |
+| CI and image publishing | Passed for Nginx integration commit `9075ca3` | [Run 43366053550](https://github.com/Szin7/application-operations-platform/actions/runs/43366053550) |
 | CI for the deployed release | Passed for release `a56088c1b7bb` | [Run 43302633612](https://github.com/Szin7/application-operations-platform/actions/runs/43302633612) |
 | Staging deployment | Exact release verified; production not restarted | [Run 43344606433](https://github.com/Szin7/application-operations-platform/actions/runs/43344606433) |
 | Production promotion | Backup created; original ticket preserved; staging not restarted | [Run 43347528825](https://github.com/Szin7/application-operations-platform/actions/runs/43347528825) |
 | Invalid promotion | Expected rejection before backup and deployment | [Run 43351535975](https://github.com/Szin7/application-operations-platform/actions/runs/43351535975) |
 
-The CI run for documentation commit `e024a55` did not deploy a new release.
+The CI run for Nginx integration commit `9075ca3` did not deploy a new application release.
 The recorded staging and production deployments used release
 `a56088c1b7bb`, application version `0.1.2`.
 
@@ -85,6 +86,33 @@ Routing and startup comparisons were reviewed separately from terminal
 output. See the [Nginx runbook](runbooks/reverse-proxy.md) for details and
 limits. This integration did not rerun the earlier deployment, rollback,
 monitoring alert, or backup-recovery exercises.
+
+## Ansible deployment rehearsals
+
+Ansible was added after Nginx and verified on 13 November 2026. The sequence
+was preflight, staging check mode and live run, then production check mode
+and live run. All runs finished with zero failures and unreachable hosts.
+Both live runs retained release `a56088c1b7bb`, version `0.1.2`.
+
+| Check | Recorded result |
+| --- | --- |
+| Check mode | Zero changes for staging and production; deployment and backup skipped |
+| Staging rehearsal | Passed; two reported changes: deployment procedure and evidence file |
+| Production rehearsal | Passed; three reported changes: backup, deployment procedure, and evidence file |
+| Production backup | `backups/20261113T050247Z-OWcabu`, created before deployment |
+| Post-deployment checks | Readiness, image/version, saved release, original production ticket, and protected containers passed |
+
+Local evidence records, in execution order:
+
+- `backups/ansible-deploy-staging-20261113T050021364380Z.json`
+- `backups/ansible-deploy-production-20261113T050313711191Z.json`
+
+The filenames use UTC. The records contain configuration hashes and
+verification results, without credentials or ticket contents, and remain
+excluded from Git. See [Deploy with Ansible](runbooks/ansible-deployments.md)
+for the full procedure and recaps. These same-release rehearsals do not
+establish upgrade, new-migration, container-replacement, or failure-recovery
+behavior. The newly created backup was not restored in this exercise.
 
 ## Monitoring screenshots
 

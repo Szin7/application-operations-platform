@@ -1,0 +1,164 @@
+---
+- name: Check the existing lab before deployment
+  ansible.builtin.import_playbook: preflight.yml
+
+- name: Deploy a verified application release
+  hosts: appops
+  gather_facts: false
+  become: false
+
+  vars:
+    project_root: "{{ playbook_dir | dirname }}"
+    release_pattern: '^application-operations-platform:[0-9a-f]{12}$'
+    environment_ports:
+      staging: [8002, 8082]
+      production: [8003, 8083]
+    container_state_format: >-
+      {{ '{{.Name}} {{.Id}} {{.Image}} {{.State.StartedAt}} {{.State.Running}} {{.State.Health.Status}}' }}
+
+  tasks:
+    - name: Require an explicit environment and release tag
+      ansible.builtin.assert:
+        that:
+          - target_environment | default('') in ['staging', 'production']
+          - release_image | default('') is match(release_pattern)
+        fail_msg: >-
+          Supply target_environment=staging|production and
+          release_image=application-operations-platform:<12-character commit>.
+
+    - name: Validate the selected local release
+      ansible.builtin.import_tasks: tasks/release.yml
+
+    - name: Read the original production ticket record
+      ansible.builtin.set_fact:
+        original_ticket: >-
+          {{ (lookup('ansible.builtin.file', project_root +
+          '/backups/rollback-check.json') | from_json)['ticket'] }}
+      no_log: true
+
+    - name: Validate the recorded ticket identifier
+      ansible.builtin.assert:
+        that:
+          - original_ticket.id is integer
+          - original_ticket.id > 0
+      no_log: true
+
+    - name: Check the original production ticket before deployment
+      ansible.builtin.include_tasks: tasks/ticket.yml
+
+    - name: Select the containers that must stay unchanged
+      ansible.builtin.set_fact:
+        protected_containers: >-
+          {{ application_containers | reject('equalto',
+          'application-operations-' + target_environment + '-api-1') | list }}
+      vars:
+        application_containers:
+          - application-operations-staging-api-1
+          - application-operations-staging-db-1
+          - application-operations-production-api-1
+          - application-operations-production-db-1
+          - application-operations-proxy-staging-1
+          - application-operations-proxy-production-1
+
+    - name: Record the other API, both databases, and both proxies
+      ansible.builtin.command:
+        argv: >-
+          {{ ['docker', 'inspect', '--format', container_state_format]
+          + protected_containers }}
+      register: protected_before
+      changed_when: false
+      check_mode: false
+
+    - name: Explain check mode
+      ansible.builtin.debug:
+        msg: >-
+          Release and current lab checks passed. Check mode skips backup,
+          deployment, and evidence creation; it does not predict migration
+          success or verify the requested release after deployment.
+      when: ansible_check_mode
+
+    - name: Back up, deploy, and verify
+      when: not ansible_check_mode
+      block:
+        - name: Back up production before deploying
+          ansible.builtin.command:
+            argv:
+              - ./scripts/backup_db.sh
+              - .env.production
+              - application-operations-production
+            chdir: "{{ project_root }}"
+          register: production_backup
+          changed_when: true
+          when: target_environment == 'production'
+
+        - name: Recheck the local tag before calling the deployment script
+          ansible.builtin.command:
+            argv: [docker, image, inspect, --format, "{{ '{{.Id}}' }}", "{{ release_image }}"]
+          register: release_before_deploy
+          changed_when: false
+          failed_when: >-
+            release_before_deploy.rc != 0 or
+            release_before_deploy.stdout != release_id
+
+        - name: Run the existing bootstrap, migration, and deployment procedure
+          ansible.builtin.command:
+            argv: [./scripts/deploy.sh, "{{ target_environment }}", "{{ release_image }}"]
+            chdir: "{{ project_root }}"
+          changed_when: true
+
+        - name: Verify the deployed release and protected containers
+          ansible.builtin.import_tasks: tasks/verify.yml
+
+        - name: Check the original production ticket after deployment
+          ansible.builtin.include_tasks: tasks/ticket.yml
+
+        - name: Hash the deployment configuration used for this run
+          ansible.builtin.stat:
+            path: "{{ project_root }}/{{ item }}"
+            checksum_algorithm: sha256
+            get_mime: false
+            get_attributes: false
+          loop:
+            - ansible/inventory.yml
+            - ansible/preflight.yml
+            - ansible/deploy.yml
+            - ansible/tasks/release.yml
+            - ansible/tasks/ticket.yml
+            - ansible/tasks/verify.yml
+            - scripts/deploy.sh
+            - scripts/backup_db.sh
+            - compose.yaml
+            - compose.tools.yaml
+          register: deployment_files
+
+        - name: Assemble the local verification record
+          ansible.builtin.set_fact:
+            evidence_time: "{{ now(utc=true, fmt='%Y%m%dT%H%M%S%fZ') }}"
+            configuration_hashes: >-
+              {{ dict(deployment_files.results | map(attribute='item') |
+              zip(deployment_files.results | map(attribute='stat.checksum'))) }}
+            backup_directory: >-
+              {{ (production_backup.stdout_lines | select('match', '^Backup saved: ')
+              | first | regex_replace('^Backup saved: ', ''))
+              if target_environment == 'production' else none }}
+
+        - name: Save successful verification evidence locally
+          ansible.builtin.copy:
+            dest: "{{ project_root }}/backups/ansible-deploy-{{ target_environment }}-{{ evidence_time }}.json"
+            mode: '0600'
+            content: >-
+              {{ dict(result='passed', checked_at_utc=evidence_time,
+              environment=target_environment, release=release_image,
+              image_id=release_id, source_commit=release_commit,
+              version=release_version, backup_directory=backup_directory,
+              readiness='passed', original_production_ticket='matched',
+              protected_containers='unchanged', saved_release='matched',
+              configuration_sha256=configuration_hashes) | to_nice_json }}
+
+        - name: Report the verified deployment
+          ansible.builtin.debug:
+            msg:
+              - "Verified {{ target_environment }}: {{ release_image }} ({{ release_version }})"
+              - "Backup: {{ backup_directory | default('Not required for staging', true) }}"
+              - "Original production ticket matched; protected containers stayed unchanged."
+              - "Evidence: backups/ansible-deploy-{{ target_environment }}-{{ evidence_time }}.json"

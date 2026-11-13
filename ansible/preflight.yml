@@ -1,0 +1,123 @@
+---
+- name: Check the existing application lab
+  hosts: appops
+  gather_facts: false
+  become: false
+
+  vars:
+    project_root: "{{ playbook_dir | dirname }}"
+    application_containers:
+      - application-operations-staging-api-1
+      - application-operations-staging-db-1
+      - application-operations-production-api-1
+      - application-operations-production-db-1
+      - application-operations-proxy-staging-1
+      - application-operations-proxy-production-1
+    readiness_endpoints:
+      - name: Staging API
+        port: 8002
+      - name: Production API
+        port: 8003
+      - name: Staging proxy
+        port: 8082
+      - name: Production proxy
+        port: 8083
+
+  tasks:
+    - name: Check local Python execution
+      ansible.builtin.ping:
+
+    - name: Check Docker daemon access
+      ansible.builtin.command:
+        argv:
+          - docker
+          - info
+          - --format
+          - "{{ '{{.ServerVersion}}' }}"
+      changed_when: false
+      check_mode: false
+
+    - name: Check Docker Compose and uv
+      ansible.builtin.command:
+        argv: "{{ item }}"
+      loop:
+        - [docker, compose, version]
+        - [uv, --version]
+      changed_when: false
+      check_mode: false
+
+    - name: Inspect environment file permissions without reading credentials
+      ansible.builtin.stat:
+        path: "{{ project_root }}/.env.{{ item }}"
+        follow: false
+        get_checksum: false
+        get_mime: false
+        get_attributes: false
+      loop:
+        - staging
+        - production
+      register: environment_files
+
+    - name: Require private regular environment files
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.isreg | default(false)
+          - item.stat.mode | default('') == '0600'
+        fail_msg: "Check .env.{{ item.item }}: it must be a regular file with mode 0600."
+        quiet: true
+      loop: "{{ environment_files.results }}"
+      loop_control:
+        label: ".env.{{ item.item }}"
+
+    - name: Read container running and health states
+      ansible.builtin.command:
+        argv:
+          - docker
+          - inspect
+          - --format
+          - "{{ '{{.State.Running}} {{.State.Health.Status}}' }}"
+          - "{{ item }}"
+      loop: "{{ application_containers }}"
+      register: container_states
+      changed_when: false
+      check_mode: false
+
+    - name: Require healthy application, database, and proxy containers
+      ansible.builtin.assert:
+        that:
+          - item.stdout == 'true healthy'
+        fail_msg: "{{ item.item }} is not running healthy."
+        quiet: true
+      loop: "{{ container_states.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Check direct and proxied readiness
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ item.port }}/health/ready"
+        method: GET
+        status_code: 200
+        return_content: true
+        follow_redirects: none
+        use_proxy: false
+        use_netrc: false
+        timeout: 5
+      loop: "{{ readiness_endpoints }}"
+      loop_control:
+        label: "{{ item.name }} on port {{ item.port }}"
+      register: readiness
+      until:
+        - readiness.status | default(0) == 200
+        - "readiness.json | default({}) == {'status': 'ready'}"
+      retries: 3
+      delay: 2
+      changed_when: false
+      check_mode: false
+
+    - name: Report the preflight scope
+      ansible.builtin.debug:
+        msg: >-
+          Local tools, environment file permissions, six container health
+          states, and four readiness endpoints passed. No deployment,
+          backup, migration, or container restart was requested.

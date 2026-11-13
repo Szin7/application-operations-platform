@@ -1,0 +1,18 @@
+---
+- name: Read the recorded ticket through the production API and proxy
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ item }}/tickets/{{ original_ticket.id }}"
+    status_code: 200
+    return_content: true
+    follow_redirects: none
+    use_proxy: false
+    use_netrc: false
+    timeout: 5
+  loop: [8003, 8083]
+  register: ticket_response
+  failed_when: >-
+    ticket_response.status | default(0) != 200 or
+    ticket_response.json | default({}) != original_ticket
+  changed_when: false
+  check_mode: false
+  no_log: true

@@ -56,7 +56,12 @@ promotion for release `a56088c1b7bb`, application version `0.1.2`.
 Open the production run to show backup and verification steps.
 Later CI runs do not automatically replace the running release.
 
-## 4. Show rejection and recovery — 60 seconds
+Next, show the [Ansible rehearsal results](runbooks/ansible-deployments.md#verified-rehearsals--13-november-2026).
+Explain the sequence: Nginx was added first, then Ansible coordinated the
+existing deployment scripts and verified the same release in both environments.
+Production backup ran before deployment. Keep this demo read-only.
+
+## 4. Show verification records — 60 seconds
 
 ```bash
 gh run view 43351535975 --repo Szin7/application-operations-platform \
@@ -69,6 +74,8 @@ from pathlib import Path
 records = (
     ("Promotion guard", "backups/production-guard-20261113T022057Z-cbf9a69e-result.json"),
     ("Backup recovery", "backups/restore-check-appops_restore_20261113022643.json"),
+    ("Ansible staging", "backups/ansible-deploy-staging-20261113T050021364380Z.json"),
+    ("Ansible production", "backups/ansible-deploy-production-20261113T050313711191Z.json"),
 )
 for label, filename in records:
     record = json.loads(Path(filename).read_text())
