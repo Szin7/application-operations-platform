@@ -26,6 +26,8 @@ The linked Actions deployments ran while the repository was private.
 | Monitoring | Both API scrape targets UP; traffic and response metrics visible | [Dashboard screenshots](docs/evidence.md#monitoring-screenshots) |
 | Nginx reverse proxy | Both environments passed routing, request-size, and runtime checks | [Proxy results](docs/runbooks/reverse-proxy.md#verified-integration--13-november-2026) |
 | Ansible deployments | Same-release rehearsals passed in staging and production; backup before production deployment | [Ansible results](docs/runbooks/ansible-deployments.md#verified-rehearsals--13-november-2026) |
+| Infrastructure monitoring | WSL host metrics, 16 containers, and four readiness probes checked | [Recorded sequence](docs/evidence.md#infrastructure-monitoring-sequence) |
+| Alert delivery | Staging proxy and host exporter outages each produced firing and resolved notifications | [Delivery results](docs/runbooks/monitoring-alerts.md#verified-firing-and-recovery-delivery) |
 
 **Public repository status:** CI checks and image publishing remain enabled.
 The staging, production, and runner-check jobs require a private repository,
@@ -246,7 +248,7 @@ RUN_DB_TESTS=1 uv run --env-file .env.test python -m pytest -v
 
 The integration tests verify the database name and account before running. They require an empty test ticket table and remove only the rows they create.
 
-The current suite has 61 tests. The integration tests cover persisted changes, filtering, ordering, and pagination.
+The current suite has 79 tests. The integration tests cover persisted changes, filtering, ordering, and pagination.
 
 Check Python code:
 
@@ -308,7 +310,7 @@ before running the database tests.
 | Image checks | UID 10001; local environment files, pytest, and Ruff absent; version matched project metadata |
 
 All 35 tests in that first CI run ran across the two test steps. The current
-suite described above has 61 tests.
+suite described above has 79 tests.
 
 [First successful CI run](https://github.com/Szin7/application-operations-platform/actions/runs/43276857853)
 verified commit `26f90315c1593f92fd6eb5704434090437895fb2` on
@@ -328,11 +330,19 @@ Prometheus collects metrics from staging and production. A provisioned
 Grafana dashboard shows scrape status, request traffic, server errors,
 and response times, with an environment selector.
 
-Alertmanager forwards firing and recovery notifications to a local
-receiver. A staging outage check verified both messages.
+The second dashboard shows WSL host resources, container CPU and memory,
+and direct/proxied readiness. Node Exporter uses a documented local build
+for WSL mount parsing. cAdvisor reads the tested cgroup v2 layout without
+runtime sockets, and Blackbox Exporter checks HTTP status and readiness body.
+
+Alertmanager forwards firing and recovery notifications to a local receiver.
+Separate staging API, staging proxy, and host exporter outage exercises
+verified delivery. The resource thresholds are initial lab settings.
 
 See the [monitoring runbook](docs/runbooks/monitoring.md) for setup,
 dashboard details, notification delivery, and troubleshooting.
+See [Infrastructure monitoring](docs/runbooks/infrastructure-monitoring.md)
+for the startup order, CI coverage, and WSL-specific limits.
 
 ## Deployments and rollback
 
@@ -385,6 +395,8 @@ Verified locally:
 - Nginx routing, application error forwarding, request-size limits, and runtime restrictions.
 - Ansible preflight and same-release staging/production deployment rehearsals.
 - A baseline audit of locked Python dependencies: 31 packages, no skips or known vulnerabilities reported.
+- WSL CPU, memory, and filesystem comparisons, plus resource metrics for 16 lab containers.
+- Four direct/proxied readiness probes, ten infrastructure dashboard queries, and two additional alert-delivery drills.
 
 ### Limits
 

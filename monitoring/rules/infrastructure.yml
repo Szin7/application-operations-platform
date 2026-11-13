@@ -1,0 +1,125 @@
+groups:
+  - name: application-readiness
+    rules:
+      - alert: ReadinessCheckFailed
+        expr: |
+          (probe_success{job="application-readiness"} == 0)
+          or (up{job="application-readiness"} == 0)
+          or ((up{job="application-readiness"} == 1)
+              unless on(instance, environment, route)
+              probe_success{job="application-readiness"})
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Readiness check failed for {{ $labels.environment }} {{ $labels.route }}'
+          description: 'The readiness probe failed or its result could not be collected for one minute. Check the probe result and exporter health before diagnosing the application.'
+
+      - alert: ReadinessTargetsMissing
+        expr: '(count(up{job="application-readiness"}) or vector(0)) != 4'
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: Readiness target inventory differs
+          description: 'Expected four configured readiness targets: staging and production, direct and proxy. Inspect the Prometheus configuration and targets.'
+
+  - name: infrastructure
+    rules:
+      - alert: InfrastructureExporterDown
+        expr: 'up{job=~"wsl-host|container-resources|readiness-exporter"} == 0'
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Monitoring exporter unavailable: {{ $labels.job }}'
+          description: 'Prometheus could not scrape {{ $labels.instance }} for one minute. Inspect the exporter container and monitoring network.'
+
+      - alert: InfrastructureTargetsMissing
+        expr: '(count(up{job=~"wsl-host|container-resources|readiness-exporter"}) or vector(0)) != 3'
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: Infrastructure target inventory differs
+          description: 'Expected one host exporter, one container exporter, and one readiness exporter. Inspect the Prometheus configuration and targets.'
+
+      - alert: HostCollectionFailed
+        expr: |
+          ((node_scrape_collector_success{job="wsl-host"} == 0)
+           or (node_filesystem_device_error{job="wsl-host"} != 0))
+          and on(job, instance) (up{job="wsl-host"} == 1)
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Host metric collection failed on {{ $labels.instance }}'
+          description: 'The exporter responds but a collector or filesystem reports an error. Inspect collector status, filesystem errors, and exporter logs.'
+
+      - alert: HostCollectorsMissing
+        expr: |
+          (up{job="wsl-host"} == 1)
+          unless on(instance)
+          (count by(instance) (node_scrape_collector_success{job="wsl-host"}) == 5)
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Host collector inventory differs on {{ $labels.instance }}'
+          description: 'Expected cpu, meminfo, loadavg, filesystem, and time collector status series from the responding exporter.'
+
+      - alert: HostCpuBusy
+        expr: |
+          (100 * (1 - avg by(job, instance, scope)
+            (rate(node_cpu_seconds_total{job="wsl-host",mode="idle"}[5m]))) > 90)
+          and on(job, instance) (up{job="wsl-host"} == 1)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'WSL CPU usage is high on {{ $labels.instance }}'
+          description: 'Five-minute average CPU usage exceeded 90 percent for five minutes. This measures the WSL Linux CPU view, not whole-Windows CPU usage.'
+
+      - alert: HostMemoryLow
+        expr: |
+          (node_memory_MemAvailable_bytes{job="wsl-host"}
+           / node_memory_MemTotal_bytes{job="wsl-host"} < 0.10)
+          and on(job, instance) (up{job="wsl-host"} == 1)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'WSL available memory is low on {{ $labels.instance }}'
+          description: 'Available memory stayed below 10 percent for five minutes. Inspect WSL workloads and container working sets.'
+
+      - alert: HostFilesystemLowSpace
+        expr: |
+          (node_filesystem_avail_bytes{job="wsl-host",mountpoint=~"/|/mnt/d"}
+           / node_filesystem_size_bytes{job="wsl-host",mountpoint=~"/|/mnt/d"} < 0.10)
+          and (node_filesystem_size_bytes{job="wsl-host",mountpoint=~"/|/mnt/d"} > 0)
+          and on(instance, mountpoint) (node_filesystem_device_error{job="wsl-host"} == 0)
+          and on(job, instance) (up{job="wsl-host"} == 1)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Low filesystem space: {{ $labels.mountpoint }} on {{ $labels.instance }}'
+          description: 'Available space stayed below 10 percent for five minutes. The root filesystem is virtual WSL capacity; /mnt/d is Windows D: volume capacity.'
+
+      - alert: ContainerMemoryHigh
+        expr: |
+          (container_memory_working_set_bytes{job="container-resources"}
+           / container_spec_memory_limit_bytes{job="container-resources"} > 0.90)
+          and (container_spec_memory_limit_bytes{job="container-resources"} > 0)
+          and (container_spec_memory_limit_bytes{job="container-resources"}
+               < scalar(node_memory_MemTotal_bytes{job="wsl-host"}))
+          and on(instance, container_id)
+              (time() - container_last_seen{job="container-resources"} < 45)
+          and on(job, instance) (up{job="container-resources"} == 1)
+          and on() (up{job="wsl-host"} == 1)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Container working set is high: {{ $labels.container_id }}'
+          description: 'Working set exceeded 90 percent of a positive memory limit below WSL total memory for five minutes. Map the container ID to its current service before changing limits.'

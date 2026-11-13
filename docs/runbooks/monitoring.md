@@ -6,6 +6,11 @@ Prometheus collects metrics from the staging and production APIs every
 Recorded views of all six dashboard panels are available in the
 [evidence walkthrough](../evidence.md#monitoring-screenshots).
 
+Host resources, container usage, and direct/proxied readiness are covered
+by the [infrastructure dashboard](infrastructure-dashboard.md).
+See [Monitoring alerts](monitoring-alerts.md) for its alert rules and
+controlled notification checks.
+
 ## Local services
 
 | Service | Version | Address |

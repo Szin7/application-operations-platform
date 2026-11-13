@@ -1,0 +1,658 @@
+{
+  "apiVersion": "dashboard.grafana.app/v1",
+  "kind": "Dashboard",
+  "metadata": {
+    "name": "appops-infrastructure"
+  },
+  "spec": {
+    "uid": "appops-infrastructure",
+    "title": "Infrastructure and Readiness",
+    "description": "WSL host resources, Docker container usage, and application readiness. The environment selector applies only to readiness; host and container panels cover the shared laptop lab.",
+    "schemaVersion": 41,
+    "version": 2,
+    "editable": false,
+    "timezone": "browser",
+    "tags": [
+      "operations",
+      "infrastructure"
+    ],
+    "refresh": "15s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "templating": {
+      "list": [
+        {
+          "name": "environment",
+          "label": "Readiness environment",
+          "type": "custom",
+          "query": "staging,production",
+          "multi": true,
+          "includeAll": true,
+          "allValue": ".*",
+          "current": {
+            "text": [
+              "All"
+            ],
+            "value": [
+              "$__all"
+            ]
+          },
+          "options": [
+            {
+              "text": "All",
+              "value": "$__all",
+              "selected": true
+            },
+            {
+              "text": "staging",
+              "value": "staging",
+              "selected": false
+            },
+            {
+              "text": "production",
+              "value": "production",
+              "selected": false
+            }
+          ]
+        }
+      ]
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Application readiness",
+        "type": "stat",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 0,
+          "w": 12,
+          "h": 6
+        },
+        "fieldConfig": {
+          "defaults": {
+            "noValue": "No data",
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "0": {
+                    "text": "DOWN",
+                    "color": "red"
+                  },
+                  "1": {
+                    "text": "UP",
+                    "color": "green"
+                  }
+                }
+              }
+            ],
+            "unit": ""
+          },
+          "overrides": []
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "expr": "probe_success{job=\"application-readiness\",environment=~\"${environment:regex}\"} and on(instance) (up{job=\"application-readiness\"} == 1)",
+            "legendFormat": "{{environment}} / {{route}}",
+            "range": false,
+            "instant": true
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "orientation": "horizontal",
+          "textMode": "value_and_name",
+          "colorMode": "value",
+          "graphMode": "none",
+          "textSize": {
+            "title": 16,
+            "value": 22
+          }
+        },
+        "description": "Four checks: staging and production through direct and proxy routes. UP requires HTTP 200 and the ready response body. A failed exporter scrape produces missing data; inspect exporter status."
+      },
+      {
+        "id": 2,
+        "title": "Monitoring exporters",
+        "type": "stat",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 12,
+          "y": 0,
+          "w": 12,
+          "h": 6
+        },
+        "fieldConfig": {
+          "defaults": {
+            "noValue": "No data",
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "0": {
+                    "text": "DOWN",
+                    "color": "red"
+                  },
+                  "1": {
+                    "text": "UP",
+                    "color": "green"
+                  }
+                }
+              }
+            ],
+            "unit": ""
+          },
+          "overrides": []
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "expr": "up{job=~\"wsl-host|container-resources|readiness-exporter\"}",
+            "legendFormat": "{{job}}",
+            "range": false,
+            "instant": true
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "orientation": "horizontal",
+          "textMode": "value_and_name",
+          "colorMode": "value",
+          "graphMode": "none",
+          "textSize": {
+            "title": 16,
+            "value": 22
+          }
+        },
+        "description": "Prometheus scrape status for the host, container, and readiness exporters. All three should be UP."
+      },
+      {
+        "id": 3,
+        "title": "Readiness history",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 6,
+          "w": 24,
+          "h": 8
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "",
+            "min": 0,
+            "noValue": "No data",
+            "custom": {
+              "drawStyle": "line",
+              "lineWidth": 2,
+              "fillOpacity": 0,
+              "spanNulls": false,
+              "lineInterpolation": "stepAfter"
+            },
+            "max": 1,
+            "decimals": 0
+          },
+          "overrides": []
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "expr": "probe_success{job=\"application-readiness\",environment=~\"${environment:regex}\"} and on(instance) (up{job=\"application-readiness\"} == 1)",
+            "legendFormat": "{{environment}} / {{route}}",
+            "range": true,
+            "instant": false
+          }
+        ],
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "description": "1 means ready; 0 means the probe failed. Gaps mean the probe result could not be collected. The environment selector affects only readiness panels."
+      },
+      {
+        "id": 4,
+        "title": "WSL CPU usage",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 14,
+          "w": 12,
+          "h": 7
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "noValue": "No data",
+            "custom": {
+              "drawStyle": "line",
+              "lineWidth": 2,
+              "fillOpacity": 8,
+              "spanNulls": false
+            },
+            "max": 100
+          },
+          "overrides": []
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "expr": "100 * (1 - avg by(job, instance, scope) (rate(node_cpu_seconds_total{job=\"wsl-host\",mode=\"idle\"}[5m]))) and on(job, instance) (up{job=\"wsl-host\"} == 1)",
+            "legendFormat": "WSL CPU",
+            "range": true,
+            "instant": false
+          }
+        ],
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "description": "Average busy CPU across all WSL logical CPUs over five minutes. This is the Linux view, not whole-Windows CPU usage."
+      },
+      {
+        "id": 5,
+        "title": "WSL available memory",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 12,
+          "y": 14,
+          "w": 12,
+          "h": 7
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "noValue": "No data",
+            "custom": {
+              "drawStyle": "line",
+              "lineWidth": 2,
+              "fillOpacity": 8,
+              "spanNulls": false
+            },
+            "max": 100
+          },
+          "overrides": []
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "expr": "100 * node_memory_MemAvailable_bytes{job=\"wsl-host\"} / node_memory_MemTotal_bytes{job=\"wsl-host\"} and on(job, instance) (up{job=\"wsl-host\"} == 1)",
+            "legendFormat": "Available memory",
+            "range": true,
+            "instant": false
+          }
+        ],
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "description": "MemAvailable as a percentage of MemTotal. This includes memory the kernel estimates can be reclaimed; lower values mean less headroom."
+      },
+      {
+        "id": 6,
+        "title": "Filesystem available space",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 21,
+          "w": 12,
+          "h": 7
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "noValue": "No data",
+            "custom": {
+              "drawStyle": "line",
+              "lineWidth": 2,
+              "fillOpacity": 8,
+              "spanNulls": false
+            },
+            "max": 100
+          },
+          "overrides": []
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "expr": "100 * node_filesystem_avail_bytes{job=\"wsl-host\",mountpoint=~\"/|/mnt/d\"} / node_filesystem_size_bytes{job=\"wsl-host\",mountpoint=~\"/|/mnt/d\"} and on(instance, mountpoint) (node_filesystem_device_error{job=\"wsl-host\"} == 0) and on(job, instance) (up{job=\"wsl-host\"} == 1)",
+            "legendFormat": "{{mountpoint}}",
+            "range": true,
+            "instant": false
+          }
+        ],
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "description": "/ is the WSL virtual filesystem; /mnt/d is the Windows D: volume. They are separate capacity measurements, not values to add together."
+      },
+      {
+        "id": 7,
+        "title": "Filesystem available bytes",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 12,
+          "y": 21,
+          "w": 12,
+          "h": 7
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes",
+            "min": 0,
+            "noValue": "No data",
+            "custom": {
+              "drawStyle": "line",
+              "lineWidth": 2,
+              "fillOpacity": 8,
+              "spanNulls": false
+            }
+          },
+          "overrides": []
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "expr": "node_filesystem_avail_bytes{job=\"wsl-host\",mountpoint=~\"/|/mnt/d\"} and on(instance, mountpoint) (node_filesystem_device_error{job=\"wsl-host\"} == 0) and on(job, instance) (up{job=\"wsl-host\"} == 1)",
+            "legendFormat": "{{mountpoint}}",
+            "range": true,
+            "instant": false
+          }
+        ],
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "description": "/ reports virtual WSL capacity. /mnt/d reports free space available on Windows D:. Collection errors produce gaps."
+      },
+      {
+        "id": 8,
+        "title": "Container CPU usage",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 28,
+          "w": 12,
+          "h": 8
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "cores",
+            "min": 0,
+            "noValue": "No data",
+            "custom": {
+              "drawStyle": "line",
+              "lineWidth": 2,
+              "fillOpacity": 8,
+              "spanNulls": false
+            }
+          },
+          "overrides": []
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "expr": "label_replace((rate(container_cpu_usage_seconds_total{job=\"container-resources\"}[5m]) and on(instance, container_id) (time() - container_last_seen{job=\"container-resources\"} < 45) and on(job, instance) (up{job=\"container-resources\"} == 1)), \"container_short\", \"$1\", \"container_id\", \"([0-9a-f]{12}).*\")",
+            "legendFormat": "{{container_short}}",
+            "range": true,
+            "instant": false
+          }
+        ],
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "description": "CPU-seconds per second over five minutes: 1.0 means one logical CPU core. Legends use the first 12 characters of each container ID. Map IDs with docker ps; recreated containers get new IDs."
+      },
+      {
+        "id": 9,
+        "title": "Container working set",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 12,
+          "y": 28,
+          "w": 12,
+          "h": 8
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes",
+            "min": 0,
+            "noValue": "No data",
+            "custom": {
+              "drawStyle": "line",
+              "lineWidth": 2,
+              "fillOpacity": 8,
+              "spanNulls": false
+            }
+          },
+          "overrides": []
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "expr": "label_replace((container_memory_working_set_bytes{job=\"container-resources\"} and on(instance, container_id) (time() - container_last_seen{job=\"container-resources\"} < 45) and on(job, instance) (up{job=\"container-resources\"} == 1)), \"container_short\", \"$1\", \"container_id\", \"([0-9a-f]{12}).*\")",
+            "legendFormat": "{{container_short}}",
+            "range": true,
+            "instant": false
+          }
+        ],
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "description": "Current working set, which excludes inactive file cache. It differs from total memory usage. Only fresh cgroup samples are shown. IDs cover Docker host containers, including the lab."
+      },
+      {
+        "id": 10,
+        "title": "Working set against memory limit",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 36,
+          "w": 24,
+          "h": 8
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "noValue": "No data",
+            "custom": {
+              "drawStyle": "line",
+              "lineWidth": 2,
+              "fillOpacity": 8,
+              "spanNulls": false
+            },
+            "max": 100
+          },
+          "overrides": []
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "expr": "label_replace((100 * container_memory_working_set_bytes{job=\"container-resources\"} / container_spec_memory_limit_bytes{job=\"container-resources\"} and (container_spec_memory_limit_bytes{job=\"container-resources\"} > 0) and (container_spec_memory_limit_bytes{job=\"container-resources\"} < scalar(node_memory_MemTotal_bytes{job=\"wsl-host\"})) and on(instance, container_id) (time() - container_last_seen{job=\"container-resources\"} < 45) and on(job, instance) (up{job=\"container-resources\"} == 1) and on() (up{job=\"wsl-host\"} == 1)), \"container_short\", \"$1\", \"container_id\", \"([0-9a-f]{12}).*\")",
+            "legendFormat": "{{container_short}}",
+            "range": true,
+            "instant": false
+          }
+        ],
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi"
+          }
+        },
+        "description": "Only containers with a positive limit below WSL total memory are included. Unlimited and host-sized limits are omitted. A sustained value above 90% triggers ContainerMemoryHigh after five minutes."
+      }
+    ],
+    "links": [
+      {
+        "title": "Application traffic",
+        "type": "link",
+        "url": "/d/appops-overview/application-operations",
+        "includeVars": false,
+        "keepTime": true,
+        "targetBlank": false
+      }
+    ]
+  }
+}

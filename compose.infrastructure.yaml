@@ -1,0 +1,150 @@
+name: application-operations-infrastructure
+
+services:
+  node-exporter:
+    # Local build with the released procfs fix for WSL mount options.
+    image: application-operations-node-exporter:1.12.1-wsl.1
+    build:
+      context: ./deploy/node-exporter
+    user: "65534:65534"
+    command:
+      - --web.listen-address=:9100
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/host/root
+      - --collector.disable-defaults
+      - --collector.cpu
+      - --collector.meminfo
+      - --collector.loadavg
+      - --collector.filesystem
+      - --collector.time
+      - '--collector.filesystem.mount-points-include=^(/|/mnt/d)$$'
+    ports:
+      - "127.0.0.1:9100:9100"
+    volumes:
+      - type: bind
+        source: /proc
+        target: /host/proc
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /sys
+        target: /host/sys
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /
+        target: /host/root
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - monitoring
+    init: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 64m
+    cpus: 0.25
+    pids_limit: 64
+    healthcheck:
+      test: [CMD, wget, -q, -T, "3", -O, /dev/null, "http://127.0.0.1:9100/"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  cadvisor:
+    image: ghcr.io/google/cadvisor@sha256:b8e7d1093144fd088f425ff003d75a4aa405de075db78dae3bc563730b1bd07a
+    # Read Docker cgroups directly; runtime sockets are not mounted.
+    cgroup: host
+    command:
+      - --docker_only=true
+      - --raw_cgroup_prefix_whitelist=/docker/
+      - --enable_metrics=cpu,memory
+      - --disable_root_cgroup_stats=true
+      - --store_container_labels=false
+      - --housekeeping_interval=10s
+      - --max_housekeeping_interval=10s
+      - --allow_dynamic_housekeeping=false
+      - --max_procs=2
+    networks:
+      - monitoring
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
+    healthcheck:
+      test: [CMD, wget, -q, -T, "3", -O, /dev/null, "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  blackbox-exporter:
+    image: quay.io/prometheus/blackbox-exporter@sha256:ea1c7aa3ef3f307cd03e85f34abb604478ccb90b567fc690da0cd9776da76b13
+    user: "65534:65534"
+    command:
+      - --config.file=/etc/blackbox_exporter/config.yml
+    volumes:
+      - type: bind
+        source: ./monitoring/blackbox.yml
+        target: /etc/blackbox_exporter/config.yml
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - monitoring
+      - staging
+      - production
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 64m
+    cpus: 0.25
+    pids_limit: 64
+    healthcheck:
+      test: [CMD, wget, -q, -T, "3", -O, /dev/null, "http://127.0.0.1:9115/metrics"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  monitoring:
+    external: true
+    name: application-operations-monitoring_default
+  staging:
+    external: true
+    name: application-operations-staging_default
+  production:
+    external: true
+    name: application-operations-production_default

@@ -12,6 +12,7 @@ alerting:
 
 rule_files:
   - /etc/prometheus/rules/api.yml
+  - /etc/prometheus/rules/infrastructure.yml
 
 scrape_configs:
   - job_name: application-api
@@ -26,3 +27,66 @@ scrape_configs:
           - application-operations-production-api-1:8000
         labels:
           environment: production
+
+  - job_name: wsl-host
+    static_configs:
+      - targets:
+          - application-operations-infrastructure-node-exporter-1:9100
+        labels:
+          instance: appops-wsl
+          scope: wsl2
+
+  - job_name: container-resources
+    static_configs:
+      - targets:
+          - application-operations-infrastructure-cadvisor-1:8080
+        labels:
+          instance: appops-docker
+          scope: docker-desktop
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'container_(cpu_usage_seconds_total|memory_usage_bytes|memory_working_set_bytes|spec_memory_limit_bytes|last_seen)'
+        action: keep
+      - source_labels: [id]
+        regex: '/docker/[0-9a-f]{64}'
+        action: keep
+      - source_labels: [id]
+        regex: '/docker/([0-9a-f]{64})'
+        target_label: container_id
+        replacement: '$1'
+
+  - job_name: readiness-exporter
+    static_configs:
+      - targets:
+          - application-operations-infrastructure-blackbox-exporter-1:9115
+        labels:
+          instance: appops-prober
+
+  - job_name: application-readiness
+    metrics_path: /probe
+    params:
+      module: [http_readiness]
+    static_configs:
+      - targets: [http://application-operations-staging-api-1:8000/health/ready]
+        labels:
+          environment: staging
+          route: direct
+      - targets: [http://application-operations-proxy-staging-1:8080/health/ready]
+        labels:
+          environment: staging
+          route: proxy
+      - targets: [http://application-operations-production-api-1:8000/health/ready]
+        labels:
+          environment: production
+          route: direct
+      - targets: [http://application-operations-proxy-production-1:8080/health/ready]
+        labels:
+          environment: production
+          route: proxy
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: application-operations-infrastructure-blackbox-exporter-1:9115

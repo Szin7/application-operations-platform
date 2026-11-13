@@ -95,10 +95,20 @@ those checks. They are intentionally excluded from Git.
 
 ## 5. Show monitoring and limits — 90 seconds
 
-Open the existing Grafana dashboard. Select staging and production and
-show scrape status, traffic, server errors, and response times.
-Use the monitoring runbook to explain the previously verified firing
-and recovery notifications. Keep services running during this short demo.
+Open Application Operations to show API traffic and response times. Then
+open Infrastructure and Readiness: show four healthy routes, three healthy
+exporters, WSL resources, and container working sets. The readiness selector
+affects only readiness panels; host resources belong to the shared machine.
+
+Explain one troubleshooting decision: WSL's mount format broke the original
+filesystem collector, so a pinned local Node Exporter build uses the released
+parser fix and a regression test. Explain that `/` is virtual WSL capacity
+and `/mnt/d` is the Windows D: volume.
+
+Show the recorded staging-proxy outage and recovery in readiness history,
+or the saved alert-delivery evidence if it is outside the retained history.
+Both the staging proxy and host exporter drills produced matched firing
+and resolved notifications. Keep services running during this short demo.
 
 Finish with the limits: one laptop, no API authentication, manual local
 deployments and rollback, local backups, and local notifications. Actions
@@ -106,8 +116,8 @@ deployment was verified in the private lab and is gated off publicly.
 
 ## Evidence for a presentation
 
-The [evidence walkthrough](evidence.md) includes the three recorded Grafana
-views, links to CI and deployment runs, and the documented recovery result.
+The [evidence walkthrough](evidence.md) includes recorded application and
+infrastructure Grafana views, links to CI and deployment runs, and recovery results.
 Use the original Actions pages for deployment and rejection evidence.
 
 Keep credentials, environment-file contents, database archives, and

@@ -1,0 +1,605 @@
+rule_files:
+- /etc/prometheus/rules/infrastructure.yml
+evaluation_interval: 15s
+tests:
+- name: failed readiness and recovery
+  interval: 15s
+  input_series:
+  - series: up{job="application-readiness",instance="http://application-operations-proxy-staging-1:8080/health/ready",environment="staging",route="proxy"}
+    values: 1x8
+  - series: probe_success{job="application-readiness",instance="http://application-operations-proxy-staging-1:8080/health/ready",environment="staging",route="proxy"}
+    values: 1 0x4 1x2
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: ReadinessCheckFailed
+    exp_alerts: []
+  - eval_time: 1m15s
+    alertname: ReadinessCheckFailed
+    exp_alerts:
+    - exp_labels:
+        job: application-readiness
+        instance: http://application-operations-proxy-staging-1:8080/health/ready
+        environment: staging
+        route: proxy
+        severity: warning
+      exp_annotations:
+        summary: Readiness check failed for staging proxy
+        description: The readiness probe failed or its result could not be collected for one minute. Check the probe
+          result and exporter health before diagnosing the application.
+  - eval_time: 1m30s
+    alertname: ReadinessCheckFailed
+    exp_alerts: []
+- name: probe scrape failure and recovery
+  interval: 15s
+  input_series:
+  - series: up{job="application-readiness",instance="http://application-operations-proxy-staging-1:8080/health/ready",environment="staging",route="proxy"}
+    values: 1 0x4 1x2
+  - series: probe_success{job="application-readiness",instance="http://application-operations-proxy-staging-1:8080/health/ready",environment="staging",route="proxy"}
+    values: 1 stale _ _ _ _ 1 1
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: ReadinessCheckFailed
+    exp_alerts: []
+  - eval_time: 1m15s
+    alertname: ReadinessCheckFailed
+    exp_alerts:
+    - exp_labels:
+        job: application-readiness
+        instance: http://application-operations-proxy-staging-1:8080/health/ready
+        environment: staging
+        route: proxy
+        severity: warning
+      exp_annotations:
+        summary: Readiness check failed for staging proxy
+        description: The readiness probe failed or its result could not be collected for one minute. Check the probe
+          result and exporter health before diagnosing the application.
+  - eval_time: 1m30s
+    alertname: ReadinessCheckFailed
+    exp_alerts: []
+- name: missing probe result despite successful scrape
+  interval: 15s
+  input_series:
+  - series: up{job="application-readiness",instance="http://application-operations-proxy-staging-1:8080/health/ready",environment="staging",route="proxy"}
+    values: 1x8
+  - series: probe_success{job="application-readiness",instance="http://application-operations-proxy-staging-1:8080/health/ready",environment="staging",route="proxy"}
+    values: 1 stale _ _ _ _ 1 1
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: ReadinessCheckFailed
+    exp_alerts: []
+  - eval_time: 1m15s
+    alertname: ReadinessCheckFailed
+    exp_alerts:
+    - exp_labels:
+        job: application-readiness
+        instance: http://application-operations-proxy-staging-1:8080/health/ready
+        environment: staging
+        route: proxy
+        severity: warning
+      exp_annotations:
+        summary: Readiness check failed for staging proxy
+        description: The readiness probe failed or its result could not be collected for one minute. Check the probe
+          result and exporter health before diagnosing the application.
+  - eval_time: 1m30s
+    alertname: ReadinessCheckFailed
+    exp_alerts: []
+- name: brief readiness failure does not fire
+  interval: 15s
+  input_series:
+  - series: up{job="application-readiness",instance="http://application-operations-proxy-staging-1:8080/health/ready",environment="staging",route="proxy"}
+    values: 1x8
+  - series: probe_success{job="application-readiness",instance="http://application-operations-proxy-staging-1:8080/health/ready",environment="staging",route="proxy"}
+    values: 1 0 0 1x5
+  alert_rule_test:
+  - eval_time: 30s
+    alertname: ReadinessCheckFailed
+    exp_alerts: []
+  - eval_time: 1m15s
+    alertname: ReadinessCheckFailed
+    exp_alerts: []
+- name: readiness target removed and restored
+  interval: 15s
+  input_series:
+  - series: up{job="application-readiness",environment="staging",route="direct",instance="staging-direct"}
+    values: 1x8
+  - series: up{job="application-readiness",environment="staging",route="proxy",instance="staging-proxy"}
+    values: 1 stale _ _ _ _ 1 1
+  - series: up{job="application-readiness",environment="production",route="direct",instance="production-direct"}
+    values: 1x8
+  - series: up{job="application-readiness",environment="production",route="proxy",instance="production-proxy"}
+    values: 1x8
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: ReadinessTargetsMissing
+    exp_alerts: []
+  - eval_time: 1m15s
+    alertname: ReadinessTargetsMissing
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+      exp_annotations:
+        summary: Readiness target inventory differs
+        description: 'Expected four configured readiness targets: staging and production, direct and proxy. Inspect
+          the Prometheus configuration and targets.'
+  - eval_time: 1m30s
+    alertname: ReadinessTargetsMissing
+    exp_alerts: []
+- name: all readiness targets missing
+  interval: 15s
+  input_series: []
+  alert_rule_test:
+  - eval_time: 45s
+    alertname: ReadinessTargetsMissing
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: ReadinessTargetsMissing
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+      exp_annotations:
+        summary: Readiness target inventory differs
+        description: 'Expected four configured readiness targets: staging and production, direct and proxy. Inspect
+          the Prometheus configuration and targets.'
+- name: exporter failure and recovery
+  interval: 15s
+  input_series:
+  - series: up{job="wsl-host",instance="appops-wsl",scope="wsl2"}
+    values: 1 0x4 1x2
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: InfrastructureExporterDown
+    exp_alerts: []
+  - eval_time: 1m15s
+    alertname: InfrastructureExporterDown
+    exp_alerts:
+    - exp_labels:
+        job: wsl-host
+        instance: appops-wsl
+        scope: wsl2
+        severity: warning
+      exp_annotations:
+        summary: 'Monitoring exporter unavailable: wsl-host'
+        description: Prometheus could not scrape appops-wsl for one minute. Inspect the exporter container and monitoring
+          network.
+  - eval_time: 1m30s
+    alertname: InfrastructureExporterDown
+    exp_alerts: []
+- name: infrastructure target removed and restored
+  interval: 15s
+  input_series:
+  - series: up{job="wsl-host",instance="appops-wsl",scope="wsl2"}
+    values: 1x8
+  - series: up{job="container-resources",instance="appops-docker",scope="docker-desktop"}
+    values: 1 stale _ _ _ _ 1 1
+  - series: up{job="readiness-exporter",instance="appops-prober"}
+    values: 1x8
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: InfrastructureTargetsMissing
+    exp_alerts: []
+  - eval_time: 1m15s
+    alertname: InfrastructureTargetsMissing
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+      exp_annotations:
+        summary: Infrastructure target inventory differs
+        description: Expected one host exporter, one container exporter, and one readiness exporter. Inspect the
+          Prometheus configuration and targets.
+  - eval_time: 1m30s
+    alertname: InfrastructureTargetsMissing
+    exp_alerts: []
+- name: all infrastructure targets missing
+  interval: 15s
+  input_series: []
+  alert_rule_test:
+  - eval_time: 45s
+    alertname: InfrastructureTargetsMissing
+    exp_alerts: []
+  - eval_time: 1m
+    alertname: InfrastructureTargetsMissing
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+      exp_annotations:
+        summary: Infrastructure target inventory differs
+        description: Expected one host exporter, one container exporter, and one readiness exporter. Inspect the
+          Prometheus configuration and targets.
+- name: collector failure and recovery
+  interval: 15s
+  input_series:
+  - &id001
+    series: up{job="wsl-host",instance="appops-wsl",scope="wsl2"}
+    values: 1x50
+  - series: node_scrape_collector_success{job="wsl-host",instance="appops-wsl",scope="wsl2",collector="filesystem"}
+    values: 1 0x4 1x2
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: HostCollectionFailed
+    exp_alerts: []
+  - eval_time: 1m15s
+    alertname: HostCollectionFailed
+    exp_alerts:
+    - exp_labels:
+        job: wsl-host
+        instance: appops-wsl
+        scope: wsl2
+        collector: filesystem
+        severity: warning
+      exp_annotations:
+        summary: Host metric collection failed on appops-wsl
+        description: The exporter responds but a collector or filesystem reports an error. Inspect collector status,
+          filesystem errors, and exporter logs.
+  - eval_time: 1m30s
+    alertname: HostCollectionFailed
+    exp_alerts: []
+- name: filesystem error despite successful collector
+  interval: 15s
+  input_series:
+  - *id001
+  - series: node_scrape_collector_success{job="wsl-host",instance="appops-wsl",scope="wsl2",collector="filesystem"}
+    values: 1x8
+  - series: node_filesystem_device_error{job="wsl-host",instance="appops-wsl",scope="wsl2",mountpoint="/",device="/dev/sdf",fstype="ext4",device_error="permission
+      denied"}
+    values: 0 1x4 0x2
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: HostCollectionFailed
+    exp_alerts: []
+  - eval_time: 1m15s
+    alertname: HostCollectionFailed
+    exp_alerts:
+    - exp_labels:
+        job: wsl-host
+        instance: appops-wsl
+        scope: wsl2
+        mountpoint: /
+        device: /dev/sdf
+        fstype: ext4
+        device_error: permission denied
+        severity: warning
+      exp_annotations:
+        summary: Host metric collection failed on appops-wsl
+        description: The exporter responds but a collector or filesystem reports an error. Inspect collector status,
+          filesystem errors, and exporter logs.
+  - eval_time: 1m30s
+    alertname: HostCollectionFailed
+    exp_alerts: []
+- name: down exporter does not report stale collector error
+  interval: 15s
+  input_series:
+  - series: up{job="wsl-host",instance="appops-wsl",scope="wsl2"}
+    values: '0x8'
+  - series: node_scrape_collector_success{job="wsl-host",instance="appops-wsl",scope="wsl2",collector="filesystem"}
+    values: '0x8'
+  alert_rule_test:
+  - eval_time: 1m15s
+    alertname: HostCollectionFailed
+    exp_alerts: []
+- name: missing collector status and recovery
+  interval: 15s
+  input_series:
+  - *id001
+  - series: node_scrape_collector_success{job="wsl-host",instance="appops-wsl",scope="wsl2",collector="cpu"}
+    values: 1x8
+  - series: node_scrape_collector_success{job="wsl-host",instance="appops-wsl",scope="wsl2",collector="filesystem"}
+    values: 1x8
+  - series: node_scrape_collector_success{job="wsl-host",instance="appops-wsl",scope="wsl2",collector="loadavg"}
+    values: 1x8
+  - series: node_scrape_collector_success{job="wsl-host",instance="appops-wsl",scope="wsl2",collector="meminfo"}
+    values: 1x8
+  - series: node_scrape_collector_success{job="wsl-host",instance="appops-wsl",scope="wsl2",collector="time"}
+    values: 1 stale _ _ _ _ 1 1
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: HostCollectorsMissing
+    exp_alerts: []
+  - eval_time: 1m15s
+    alertname: HostCollectorsMissing
+    exp_alerts:
+    - exp_labels:
+        job: wsl-host
+        instance: appops-wsl
+        scope: wsl2
+        severity: warning
+      exp_annotations:
+        summary: Host collector inventory differs on appops-wsl
+        description: Expected cpu, meminfo, loadavg, filesystem, and time collector status series from the responding
+          exporter.
+  - eval_time: 1m30s
+    alertname: HostCollectorsMissing
+    exp_alerts: []
+- name: down exporter does not report missing collectors
+  interval: 15s
+  input_series:
+  - series: up{job="wsl-host",instance="appops-wsl",scope="wsl2"}
+    values: '0x8'
+  alert_rule_test:
+  - eval_time: 1m15s
+    alertname: HostCollectorsMissing
+    exp_alerts: []
+- name: low host memory and recovery
+  interval: 15s
+  input_series:
+  - *id001
+  - series: node_memory_MemTotal_bytes{job="wsl-host",instance="appops-wsl",scope="wsl2"}
+    values: 100x24
+  - series: node_memory_MemAvailable_bytes{job="wsl-host",instance="appops-wsl",scope="wsl2"}
+    values: 50 5x20 50x3
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: HostMemoryLow
+    exp_alerts: []
+  - eval_time: 5m15s
+    alertname: HostMemoryLow
+    exp_alerts:
+    - exp_labels:
+        job: wsl-host
+        instance: appops-wsl
+        scope: wsl2
+        severity: warning
+      exp_annotations:
+        summary: WSL available memory is low on appops-wsl
+        description: Available memory stayed below 10 percent for five minutes. Inspect WSL workloads and container
+          working sets.
+  - eval_time: 5m30s
+    alertname: HostMemoryLow
+    exp_alerts: []
+- name: host memory boundary does not fire
+  interval: 15s
+  input_series:
+  - *id001
+  - series: node_memory_MemTotal_bytes{job="wsl-host",instance="appops-wsl",scope="wsl2"}
+    values: 100x24
+  - series: node_memory_MemAvailable_bytes{job="wsl-host",instance="appops-wsl",scope="wsl2"}
+    values: 10x24
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: HostMemoryLow
+    exp_alerts: []
+- name: low filesystem space and recovery
+  interval: 15s
+  input_series:
+  - *id001
+  - series: node_filesystem_size_bytes{job="wsl-host",instance="appops-wsl",scope="wsl2",mountpoint="/",device="/dev/sdf",fstype="ext4"}
+    values: 100x24
+  - series: node_filesystem_avail_bytes{job="wsl-host",instance="appops-wsl",scope="wsl2",mountpoint="/",device="/dev/sdf",fstype="ext4"}
+    values: 50 5x20 50x3
+  - series: node_filesystem_device_error{job="wsl-host",instance="appops-wsl",scope="wsl2",mountpoint="/",device="/dev/sdf",fstype="ext4"}
+    values: '0x24'
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: HostFilesystemLowSpace
+    exp_alerts: []
+  - eval_time: 5m15s
+    alertname: HostFilesystemLowSpace
+    exp_alerts:
+    - exp_labels:
+        job: wsl-host
+        instance: appops-wsl
+        scope: wsl2
+        mountpoint: /
+        device: /dev/sdf
+        fstype: ext4
+        severity: warning
+      exp_annotations:
+        summary: 'Low filesystem space: / on appops-wsl'
+        description: 'Available space stayed below 10 percent for five minutes. The root filesystem is virtual WSL
+          capacity; /mnt/d is Windows D: volume capacity.'
+  - eval_time: 5m30s
+    alertname: HostFilesystemLowSpace
+    exp_alerts: []
+- name: filesystem boundary and collection errors do not report low space
+  interval: 15s
+  input_series:
+  - *id001
+  - series: node_filesystem_size_bytes{job="wsl-host",instance="appops-wsl",scope="wsl2",mountpoint="/",device="/dev/sdf",fstype="ext4"}
+    values: 100x24
+  - series: node_filesystem_avail_bytes{job="wsl-host",instance="appops-wsl",scope="wsl2",mountpoint="/",device="/dev/sdf",fstype="ext4"}
+    values: 5x24
+  - series: node_filesystem_device_error{job="wsl-host",instance="appops-wsl",scope="wsl2",mountpoint="/",device="/dev/sdf",fstype="ext4"}
+    values: 1x24
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: HostFilesystemLowSpace
+    exp_alerts: []
+- name: filesystem exact ten percent boundary
+  interval: 15s
+  input_series:
+  - *id001
+  - series: node_filesystem_size_bytes{job="wsl-host",instance="appops-wsl",scope="wsl2",mountpoint="/",device="/dev/sdf",fstype="ext4"}
+    values: 100x24
+  - series: node_filesystem_avail_bytes{job="wsl-host",instance="appops-wsl",scope="wsl2",mountpoint="/",device="/dev/sdf",fstype="ext4"}
+    values: 10x24
+  - series: node_filesystem_device_error{job="wsl-host",instance="appops-wsl",scope="wsl2",mountpoint="/",device="/dev/sdf",fstype="ext4"}
+    values: '0x24'
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: HostFilesystemLowSpace
+    exp_alerts: []
+- name: sustained CPU use and moving average recovery
+  interval: 15s
+  input_series:
+  - *id001
+  - series: node_cpu_seconds_total{job="wsl-host",instance="appops-wsl",scope="wsl2",cpu="0",mode="idle"}
+    values: 0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0 5.5 6.0 6.5 7.0 7.5 8.0 8.5 9.0 9.5 10.0 10.5 11.0 11.5
+      26.5 41.5 56.5 71.5 86.5 101.5 116.5 131.5 146.5 161.5 176.5 191.5
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: HostCpuBusy
+    exp_alerts: []
+  - eval_time: 5m15s
+    alertname: HostCpuBusy
+    exp_alerts:
+    - exp_labels:
+        job: wsl-host
+        instance: appops-wsl
+        scope: wsl2
+        severity: warning
+      exp_annotations:
+        summary: WSL CPU usage is high on appops-wsl
+        description: Five-minute average CPU usage exceeded 90 percent for five minutes. This measures the WSL Linux
+          CPU view, not whole-Windows CPU usage.
+  - eval_time: 8m
+    alertname: HostCpuBusy
+    exp_alerts: []
+- name: CPU counter reset does not cause a busy alert
+  interval: 15s
+  input_series:
+  - *id001
+  - series: node_cpu_seconds_total{job="wsl-host",instance="appops-wsl",scope="wsl2",cpu="0",mode="idle"}
+    values: 1000 1015 1030 1045 1060 1075 1090 1105 1120 1135 1150 1165 1180 1195 1210 1225 1240 1255 1270 1285
+      0 15 30 45 60 75 90 105 120 135 150 165 180 195 210 225 240 255 270 285 300
+  alert_rule_test:
+  - eval_time: 10m
+    alertname: HostCpuBusy
+    exp_alerts: []
+- name: container working set pressure and recovery
+  interval: 15s
+  input_series:
+  - *id001
+  - &id002
+    series: up{job="container-resources",instance="appops-docker",scope="docker-desktop"}
+    values: 1x50
+  - &id003
+    series: node_memory_MemTotal_bytes{job="wsl-host",instance="appops-wsl",scope="wsl2"}
+    values: 1000x24
+  - &id004
+    series: container_spec_memory_limit_bytes{job="container-resources",instance="appops-docker",scope="docker-desktop",id="/docker/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",container_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+    values: 100x24
+  - &id005
+    series: container_last_seen{job="container-resources",instance="appops-docker",scope="docker-desktop",id="/docker/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",container_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+    values: 0+15x24
+  - series: container_memory_working_set_bytes{job="container-resources",instance="appops-docker",scope="docker-desktop",id="/docker/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",container_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+    values: 40 95x20 40x3
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: ContainerMemoryHigh
+    exp_alerts: []
+  - eval_time: 5m15s
+    alertname: ContainerMemoryHigh
+    exp_alerts:
+    - exp_labels:
+        job: container-resources
+        instance: appops-docker
+        scope: docker-desktop
+        id: /docker/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        container_id: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        severity: warning
+      exp_annotations:
+        summary: 'Container working set is high: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+        description: Working set exceeded 90 percent of a positive memory limit below WSL total memory for five
+          minutes. Map the container ID to its current service before changing limits.
+  - eval_time: 5m30s
+    alertname: ContainerMemoryHigh
+    exp_alerts: []
+- name: cache-heavy usage is not working set pressure
+  interval: 15s
+  input_series:
+  - *id001
+  - *id002
+  - *id003
+  - *id004
+  - *id005
+  - series: container_memory_usage_bytes{job="container-resources",instance="appops-docker",scope="docker-desktop",id="/docker/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",container_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+    values: 99x24
+  - series: container_memory_working_set_bytes{job="container-resources",instance="appops-docker",scope="docker-desktop",id="/docker/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",container_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+    values: 40x24
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: ContainerMemoryHigh
+    exp_alerts: []
+- name: container exact ninety percent boundary
+  interval: 15s
+  input_series:
+  - *id001
+  - *id002
+  - *id003
+  - *id004
+  - *id005
+  - series: container_memory_working_set_bytes{job="container-resources",instance="appops-docker",scope="docker-desktop",id="/docker/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",container_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+    values: 90x24
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: ContainerMemoryHigh
+    exp_alerts: []
+- name: zero container limit is excluded
+  interval: 15s
+  input_series:
+  - *id001
+  - *id002
+  - series: node_memory_MemTotal_bytes{job="wsl-host",instance="appops-wsl",scope="wsl2"}
+    values: 1000x24
+  - series: container_spec_memory_limit_bytes{job="container-resources",instance="appops-docker",scope="docker-desktop",id="/docker/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",container_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+    values: '0x24'
+  - series: container_last_seen{job="container-resources",instance="appops-docker",scope="docker-desktop",id="/docker/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",container_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+    values: 0+15x24
+  - series: container_memory_working_set_bytes{job="container-resources",instance="appops-docker",scope="docker-desktop",id="/docker/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",container_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+    values: 1x24
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: ContainerMemoryHigh
+    exp_alerts: []
+- name: host-sized container limit is excluded
+  interval: 15s
+  input_series:
+  - *id001
+  - *id002
+  - series: node_memory_MemTotal_bytes{job="wsl-host",instance="appops-wsl",scope="wsl2"}
+    values: 1000x24
+  - series: container_spec_memory_limit_bytes{job="container-resources",instance="appops-docker",scope="docker-desktop",id="/docker/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",container_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+    values: 1000x24
+  - series: container_last_seen{job="container-resources",instance="appops-docker",scope="docker-desktop",id="/docker/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",container_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+    values: 0+15x24
+  - series: container_memory_working_set_bytes{job="container-resources",instance="appops-docker",scope="docker-desktop",id="/docker/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",container_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+    values: 1000x24
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: ContainerMemoryHigh
+    exp_alerts: []
+- name: larger-than-host container limit is excluded
+  interval: 15s
+  input_series:
+  - *id001
+  - *id002
+  - series: node_memory_MemTotal_bytes{job="wsl-host",instance="appops-wsl",scope="wsl2"}
+    values: 1000x24
+  - series: container_spec_memory_limit_bytes{job="container-resources",instance="appops-docker",scope="docker-desktop",id="/docker/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",container_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+    values: 10000x24
+  - series: container_last_seen{job="container-resources",instance="appops-docker",scope="docker-desktop",id="/docker/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",container_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+    values: 0+15x24
+  - series: container_memory_working_set_bytes{job="container-resources",instance="appops-docker",scope="docker-desktop",id="/docker/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",container_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+    values: 10000x24
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: ContainerMemoryHigh
+    exp_alerts: []
+- name: stale container samples do not fire
+  interval: 15s
+  input_series:
+  - *id001
+  - *id002
+  - *id003
+  - *id004
+  - series: container_last_seen{job="container-resources",instance="appops-docker",scope="docker-desktop",id="/docker/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",container_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+    values: '0x24'
+  - series: container_memory_working_set_bytes{job="container-resources",instance="appops-docker",scope="docker-desktop",id="/docker/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",container_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+    values: 95x24
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: ContainerMemoryHigh
+    exp_alerts: []
+- name: missing working set is not replaced by total usage
+  interval: 15s
+  input_series:
+  - *id001
+  - *id002
+  - *id003
+  - *id004
+  - *id005
+  - series: container_memory_usage_bytes{job="container-resources",instance="appops-docker",scope="docker-desktop",id="/docker/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",container_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+    values: 99x24
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: ContainerMemoryHigh
+    exp_alerts: []

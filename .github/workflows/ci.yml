@@ -81,6 +81,9 @@ jobs:
       - name: Check monitoring configuration and alert rules
         run: ./scripts/check_monitoring.sh
 
+      - name: Check infrastructure configuration and exporter image
+        run: ./scripts/check_infrastructure.sh
+
       - name: Check Nginx proxy configuration
         run: ./scripts/check_proxy.sh
 

@@ -129,6 +129,76 @@ See [Python dependency checks](runbooks/dependency-checks.md) for the CI gate,
 report files, and coverage limits. The baseline preceded the reusable CI
 check; a later workflow run is needed to verify that integration on GitHub.
 
+## Infrastructure monitoring sequence
+
+The following checks ran on 13 November 2026, after the dependency-audit
+integration. Times below are UTC, matching the local evidence filenames.
+All services remained on the same laptop.
+
+| Time (UTC) | Step | Recorded result |
+| --- | --- | --- |
+| 06:57 | WSL host exporter | Five collectors passed; 12 CPUs, memory total, and two filesystem identities/capacities matched WSL |
+| 07:05 | Host scrape | Prometheus ingested the checked host metrics |
+| 07:35 | Container collection | CPU, memory, and freshness passed for the then-running 15 containers |
+| 07:46 | Readiness collection | Four HTTP/body probes passed; all 16 lab containers were checked |
+| 11:17 | Resume after the pause | All 16 existing containers recovered with preserved IDs and images; collection and readiness passed again |
+| 11:35 | Alert rules | All 11 rules evaluated without errors and were inactive |
+| 11:42–11:47 | Delivery drills | Staging proxy, then host exporter: firing and matching recovery notifications received |
+| 11:56 | Dashboard queries | Ten panel queries and both readiness filters passed; all existing containers unchanged |
+
+The two delivery drills deliberately restarted only their selected targets.
+Production stayed ready through direct and proxied routes, and every
+returned field of the original production ticket matched throughout.
+The running application release remained `a56088c1b7bb`, version `0.1.2`.
+
+Key local records:
+
+- `backups/node-exporter-check-20261113T065751619929Z.json`
+- `backups/container-monitoring-check-20261113T073505550400Z.json`
+- `backups/readiness-monitoring-check-20261113T074611176825Z.json`
+- `backups/readiness-monitoring-check-20261113T111736928158Z.json`
+- `backups/monitoring-alerts-check-20261113T113531130273Z.json`
+- `backups/alert-delivery-check-20261113T114254887139Z.json`
+- `backups/infrastructure-dashboard-check-20261113T115608574538Z.json`
+
+These raw records stay local. See the [infrastructure runbook](runbooks/infrastructure-monitoring.md)
+for startup and verification, and the [alert runbook](runbooks/monitoring-alerts.md)
+for the distinction between synthetic resource tests and live delivery drills.
+The monitoring integration's first CI run is pending; the local results
+above are not a claim that GitHub has already checked this change.
+
+## Infrastructure dashboard screenshots
+
+Captured on 13 November 2026 from the running local dashboard. These views
+show measured lab usage, not a benchmark. Gaps during the host-exporter
+outage represent unavailable data, not measured zeros.
+
+### Readiness and exporter status
+
+The final view shows four readiness routes and three exporters UP, with
+readable status labels. Readiness history records the deliberately stopped
+staging proxy dropping to zero and recovering. The direct staging route
+and both production routes stayed ready during that drill.
+
+![Grafana showing four readiness routes and three exporters UP, with the staging proxy outage and recovery](images/grafana-infrastructure-readiness.png)
+
+### Host resources and filesystem capacity
+
+The screenshot shows approximately 7.33% WSL CPU usage and 78.4% available
+memory at its right edge. The root filesystem reports virtual WSL capacity;
+Windows D: is shown separately as `/mnt/d`, with about 80.6 GiB available.
+
+![Grafana WSL CPU, memory, and separate root and Windows D filesystem capacity](images/grafana-host-resources.png)
+
+### Container resources
+
+CPU is plotted in cores, memory as working set, and limited containers
+as a percentage of their configured memory limit. Legends use current
+container IDs because the raw cgroup collector does not provide service names.
+Use `docker ps --format 'table {{.ID}}\t{{.Names}}'` to map them to names.
+
+![Grafana container CPU, working set, and working set against memory limits](images/grafana-container-resources.png)
+
 ## Monitoring screenshots
 
 Captured from the local Grafana dashboard on 13 November 2026. These are
