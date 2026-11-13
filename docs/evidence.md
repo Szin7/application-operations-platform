@@ -65,6 +65,27 @@ The earlier [application rollback exercise](runbooks/deployment-rollback.md#veri
 restored the previous application image and preserved the original ticket.
 It used an unchanged database schema.
 
+## Nginx integration
+
+On 13 November 2026, Nginx was added after the recorded deployment and
+recovery checks. The order was image verification, staging proxy and routing
+checks, production proxy and routing checks, then runtime verification.
+The application release remained `a56088c1b7bb`, version `0.1.2`.
+
+Both proxies passed readiness, route/query forwarding, matching 404 and 422
+responses, and rejection of oversized requests with 413. Runtime checks
+confirmed the non-root user, read-only settings, capability and privilege
+restrictions, resource limits, rotating logs, loopback ports, and separate
+application networks. Existing API and database containers stayed unchanged
+across proxy startup.
+
+The local record `backups/proxy-check-20261113T042015231868Z.json` contains
+runtime, request-size, and readiness checks plus configuration hashes.
+Routing and startup comparisons were reviewed separately from terminal
+output. See the [Nginx runbook](runbooks/reverse-proxy.md) for details and
+limits. This integration did not rerun the earlier deployment, rollback,
+monitoring alert, or backup-recovery exercises.
+
 ## Monitoring screenshots
 
 Captured from the local Grafana dashboard on 13 November 2026. These are

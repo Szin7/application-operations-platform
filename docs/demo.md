@@ -1,7 +1,7 @@
 # Five-minute project demo
 
 Run from the repository root in WSL with Docker, staging, production,
-and monitoring already running. GitHub CLI must be signed in.
+both Nginx proxies, and monitoring already running. GitHub CLI must be signed in.
 These commands only inspect services and evidence. They are intended for
 the existing lab checkout; its local evidence files are not included in Git.
 For a GitHub-only review, use the [evidence walkthrough](evidence.md).
@@ -22,9 +22,10 @@ rollback, and recovery. Both environments run on one laptop.
 ```bash
 docker ps --filter name=application-operations-staging- \
   --filter name=application-operations-production- \
+  --filter name=application-operations-proxy- \
   --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
 
-for port in 8002 8003; do
+for port in 8082 8083; do
   printf '\nPort %s readiness:\n' "$port"
   curl --fail --silent --show-error "http://127.0.0.1:$port/health/ready"
   printf '\nVersion:\n'
@@ -35,6 +36,11 @@ done
 
 Readiness checks database access. The version endpoint shows the
 application version; the deployment workflow also checks the image.
+These requests go through Nginx. Direct API ports 8002 and 8003 remain
+available for troubleshooting. Explain the build sequence: the existing
+application deployment and recovery checks came first, then the proxies
+were added and checked without restarting the application or databases.
+See the [proxy runbook](runbooks/reverse-proxy.md) for the recorded checks.
 
 ## 3. Show delivery evidence — 60 seconds
 

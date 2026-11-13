@@ -65,6 +65,9 @@ jobs:
       - name: Check monitoring configuration and alert rules
         run: ./scripts/check_monitoring.sh
 
+      - name: Check Nginx proxy configuration
+        run: ./scripts/check_proxy.sh
+
       - name: Prepare the test database
         run: |
           uv run --locked python scripts/bootstrap_db.py

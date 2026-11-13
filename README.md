@@ -23,6 +23,7 @@ The linked Actions deployments ran while the repository was private.
 | Application rollback | Previous image restored; original ticket preserved | [Rollback results](docs/runbooks/deployment-rollback.md#verified-exercise-12-november-2026) |
 | Production backup recovery | Separate test database; migration, application access, and ticket checked | [Recovery results](docs/runbooks/backup-restore.md#verified-production-backup-recovery) |
 | Monitoring | Both API scrape targets UP; traffic and response metrics visible | [Dashboard screenshots](docs/evidence.md#monitoring-screenshots) |
+| Nginx reverse proxy | Both environments passed routing, request-size, and runtime checks | [Proxy results](docs/runbooks/reverse-proxy.md#verified-integration--13-november-2026) |
 
 **Public repository status:** CI checks and image publishing remain enabled.
 The staging, production, and runner-check jobs require a private repository,
@@ -55,6 +56,22 @@ are separate Compose projects on one laptop. Production promotion reuses
 the image verified in staging and creates a database backup before deployment.
 The Actions deployment jobs are gated off in this public repository.
 
+## Local HTTP access
+
+Nginx was added after the deployment and recovery exercises. Each proxy
+joins only its own environment's Docker network and forwards to the API.
+The existing application release remains `a56088c1b7bb` (version `0.1.2`).
+
+| Environment | Nginx entry point | Direct API for troubleshooting |
+| --- | --- | --- |
+| Staging | http://127.0.0.1:8082 | http://127.0.0.1:8002 |
+| Production | http://127.0.0.1:8083 | http://127.0.0.1:8003 |
+
+These are local HTTP endpoints without TLS or authentication. Direct API
+access bypasses the proxy's request limits. Prometheus still scrapes the
+APIs directly. See the [Nginx runbook](docs/runbooks/reverse-proxy.md) for
+startup, validation, runtime settings, troubleshooting, and recorded results.
+
 ## Monitoring preview
 
 ![Grafana showing production and staging scrape targets UP and request traffic](docs/images/grafana-overview.png)
@@ -70,6 +87,7 @@ not a live hosted dashboard. [View all dashboard panels](docs/evidence.md#monito
 - Check application liveness and database readiness.
 - Run database setup repeatedly without removing existing tickets.
 - Run unit tests and PostgreSQL integration tests.
+- Access staging and production through separate local Nginx proxies.
 
 ## Requirements
 
@@ -337,6 +355,7 @@ Verified locally:
 - Production backup recovery into a separate test database, including
   application access, migration revision, and ticket comparison.
 - Prometheus collection, Grafana, and local firing and recovery notifications.
+- Nginx routing, application error forwarding, request-size limits, and runtime restrictions.
 
 ### Limits
 
