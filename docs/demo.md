@@ -1,23 +1,13 @@
-# Five-minute project demo
+# Check the running lab
 
-Run from the repository root in WSL with Docker, staging, production,
-both Nginx proxies, and monitoring already running. GitHub CLI must be signed in.
-These commands only inspect services and evidence. They are intended for
-the existing lab checkout; its local evidence files are not included in Git.
-For a GitHub-only review, use the [evidence walkthrough](evidence.md).
+Run from the repository root in WSL after staging, production, both Nginx
+proxies, and monitoring are running. These commands inspect the services;
+they do not deploy a release or introduce an outage.
 
-CI remains enabled in the public repository. The Actions deployment and
-runner-check jobs are gated off by their private-repository condition.
-Use the historical runs below to demonstrate the verified private-lab
-deployments; do not dispatch new deployment runs for this demo.
+For a fresh checkout, start with [Local setup](setup.md). Recorded results
+are in the [build record](evidence.md).
 
-## 1. Explain the setup — 30 seconds
-
-Show the README architecture diagram. Explain that the small ticket API
-is used to practise deployments, database permissions, monitoring,
-rollback, and recovery. Both environments run on one laptop.
-
-## 2. Show the services — 60 seconds
+## Containers and readiness
 
 ```bash
 docker ps --filter name=application-operations-staging- \
@@ -25,7 +15,7 @@ docker ps --filter name=application-operations-staging- \
   --filter name=application-operations-proxy- \
   --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
 
-for port in 8082 8083; do
+for port in 8002 8003 8082 8083; do
   printf '\nPort %s readiness:\n' "$port"
   curl --fail --silent --show-error "http://127.0.0.1:$port/health/ready"
   printf '\nVersion:\n'
@@ -34,91 +24,66 @@ for port in 8082 8083; do
 done
 ```
 
-Readiness checks database access. The version endpoint shows the
-application version; the deployment workflow also checks the image.
-These requests go through Nginx. Direct API ports 8002 and 8003 remain
-available for troubleshooting. Explain the build sequence: the existing
-application deployment and recovery checks came first, then the proxies
-were added and checked without restarting the application or databases.
-See the [proxy runbook](runbooks/reverse-proxy.md) for the recorded checks.
+Each readiness request should return `{"status":"ready"}`. Ports 8082 and
+8083 go through Nginx; 8002 and 8003 go directly to the APIs. The version
+response reports the application version, not the container's image digest.
 
-## 3. Show delivery evidence — 60 seconds
+## CI and deployment records
+
+With GitHub CLI signed in:
 
 ```bash
-for run_id in 43302633612 43344606433 43347528825; do
+for run_id in 43427425933 43344606433 43347528825; do
   gh run view "$run_id" --repo Szin7/application-operations-platform \
     --json url,conclusion --jq '"\(.conclusion)  \(.url)"'
 done
 ```
 
-These historical runs show CI, staging deployment, and production
-promotion for release `a56088c1b7bb`, application version `0.1.2`.
-Open the production run to show backup and verification steps.
-Later CI runs do not automatically replace the running release.
+These are the final recovery-integration CI run and the earlier staging and
+production deployment runs. CI publishing did not redeploy the lab. The
+recorded deployments used release `a56088c1b7bb`, version `0.1.2`.
 
-Next, show the [Ansible rehearsal results](runbooks/ansible-deployments.md#verified-rehearsals--13-november-2026).
-Explain the sequence: Nginx was added first, then Ansible coordinated the
-existing deployment scripts and verified the same release in both environments.
-Production backup ran before deployment. Keep this demo read-only.
-Then show the [dependency audit baseline](runbooks/dependency-checks.md#verified-baseline--13-november-2026)
-and the CI dependency-audit step. Explain that it covers known vulnerabilities
-in locked Python dependencies and blocks publishing when the audit fails.
+The [build record](evidence.md#delivery-checks) also links the deliberately
+rejected promotion. Deployment jobs are gated off in the public repository;
+view the existing runs instead of dispatching them as a service check.
 
-## 4. Show verification records — 60 seconds
+## Grafana
+
+Open <http://localhost:3000> and sign in with the local Grafana account.
+
+- **Application Operations** shows API traffic, status codes, and response times.
+- **Infrastructure and Readiness** shows the four readiness routes, three
+  exporters, WSL resources, and container CPU and memory.
+
+The environment selector on the infrastructure dashboard filters readiness
+panels. Host metrics belong to the shared WSL machine. `/` reports the WSL
+virtual filesystem; `/mnt/d` reports the Windows D: volume.
+
+If the earlier outage has aged out of the dashboard, use the
+[recorded screenshots](evidence.md#infrastructure-dashboard-screenshots).
+A missing sample is not a measured zero. See the
+[panel guide](runbooks/infrastructure-dashboard.md#read-the-panels) for units
+and the meaning of each graph.
+
+## Saved recovery result
+
+On the original lab checkout, read the result from the completed staging drill:
 
 ```bash
-gh run view 43351535975 --repo Szin7/application-operations-platform \
-  --json url,conclusion --jq '"\(.conclusion)  \(.url)"'
-
-python3 - <<'DEMO_EVIDENCE'
+python3 - <<'PYTHON'
 import json
 from pathlib import Path
 
-records = (
-    ("Promotion guard", "backups/production-guard-20261113T022057Z-cbf9a69e-result.json"),
-    ("Backup recovery", "backups/restore-check-appops_restore_20261113022643.json"),
-    ("Ansible staging", "backups/ansible-deploy-staging-20261113T050021364380Z.json"),
-    ("Ansible production", "backups/ansible-deploy-production-20261113T050313711191Z.json"),
-)
-for label, filename in records:
-    record = json.loads(Path(filename).read_text())
-    print(f"{label}: {record['result']}")
-DEMO_EVIDENCE
+path = Path("backups/staging-recovery-20261113T123703731666Z/evidence.json")
+record = json.loads(path.read_text())
+print("Staging recovery:", record["status"])
+print("Saved release:", record["saved_release"])
+PYTHON
 ```
 
-The failed workflow was intentional: a CI run was supplied instead of a
-staging deployment run. Backup and deployment were skipped.
+That file is local and is absent from a fresh clone. Reading it does not rerun
+the drill. The [recovery runbook](runbooks/staging-recovery.md) contains the
+procedure and a summary of the result.
 
-Show the verified production recovery table in the backup runbook.
-The local JSON files record earlier checks; reading them does not rerun
-those checks. They are intentionally excluded from Git.
-
-## 5. Show monitoring and limits — 90 seconds
-
-Open Application Operations to show API traffic and response times. Then
-open Infrastructure and Readiness: show four healthy routes, three healthy
-exporters, WSL resources, and container working sets. The readiness selector
-affects only readiness panels; host resources belong to the shared machine.
-
-Explain one troubleshooting decision: WSL's mount format broke the original
-filesystem collector, so a pinned local Node Exporter build uses the released
-parser fix and a regression test. Explain that `/` is virtual WSL capacity
-and `/mnt/d` is the Windows D: volume.
-
-Show the recorded staging-proxy outage and recovery in readiness history,
-or the saved alert-delivery evidence if it is outside the retained history.
-Both the staging proxy and host exporter drills produced matched firing
-and resolved notifications. Keep services running during this short demo.
-
-Finish with the limits: one laptop, no API authentication, manual local
-deployments and rollback, local backups, and local notifications. Actions
-deployment was verified in the private lab and is gated off publicly.
-
-## Evidence for a presentation
-
-The [evidence walkthrough](evidence.md) includes recorded application and
-infrastructure Grafana views, links to CI and deployment runs, and recovery results.
-Use the original Actions pages for deployment and rejection evidence.
-
-Keep credentials, environment-file contents, database archives, and
-raw ticket data out of screenshots and Git.
+Keep credentials, database archives, and raw ticket data out of screenshots.
+For the boundaries of this setup, see [Scope and limitations](limitations.md).

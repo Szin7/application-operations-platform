@@ -1,123 +1,58 @@
 # Application Operations Platform
 
-A local DevOps project for deploying, monitoring, and recovering a FastAPI
-ticket service backed by PostgreSQL. It includes CI checks, container image
-publishing, separate staging and production environments, application
-rollback, and database backup recovery.
+A small ticket API used to practise deployment, monitoring, and recovery.
+The application runs with PostgreSQL in Docker Compose on a Windows laptop
+with WSL. Staging and production have separate databases and networks on
+that same machine.
 
-Docker Compose runs the services. Alembic tracks schema changes, a restricted
-database account serves the API, and Prometheus, Grafana, and Alertmanager
-provide monitoring and local notifications. Nginx fronts each environment,
-and Ansible coordinates local deployment checks, production backup, and verification.
+The work started with the API and database, then added release scripts,
+CI, monitoring, and failure drills. The [build record](docs/evidence.md#build-order)
+links those stages to the commits and checks.
 
-## Verified results
+## What it does
 
-These checks were completed in the local lab on 12–13 November 2026.
-The linked Actions deployments ran while the repository was private.
+The API creates tickets, lists them, and updates their status. It has separate
+liveness and database readiness endpoints, plus request metrics for Prometheus.
+The rest of the project handles operating that service:
 
-| Check | Result | Evidence |
-| --- | --- | --- |
-| CI and image publishing | Passed for monitoring integration commit `1ecf2ff` | [CI run](https://github.com/Szin7/application-operations-platform/actions/runs/43423286458) |
-| Staging deployment | Verified release; production was not restarted | [Staging run](https://github.com/Szin7/application-operations-platform/actions/runs/43344606433) |
-| Production promotion | Backup created; original ticket preserved | [Production run](https://github.com/Szin7/application-operations-platform/actions/runs/43347528825) |
-| Invalid promotion | Expected rejection; backup and deployment skipped | [Intentional failed run](https://github.com/Szin7/application-operations-platform/actions/runs/43351535975) |
-| Application rollback | Previous image restored; original ticket preserved | [Rollback results](docs/runbooks/deployment-rollback.md#verified-exercise-12-november-2026) |
-| Staging startup recovery | Intended exit 42 confirmed; saved image restored; staging data preserved | [Recovery drill](docs/runbooks/staging-recovery.md#verified-exercise--13-november-2026) |
-| Production backup recovery | Separate test database; migration, application access, and ticket checked | [Recovery results](docs/runbooks/backup-restore.md#verified-production-backup-recovery) |
-| Monitoring | Both API scrape targets UP; traffic and response metrics visible | [Dashboard screenshots](docs/evidence.md#monitoring-screenshots) |
-| Nginx reverse proxy | Both environments passed routing, request-size, and runtime checks | [Proxy results](docs/runbooks/reverse-proxy.md#verified-integration--13-november-2026) |
-| Ansible deployments | Same-release rehearsals passed in staging and production; backup before production deployment | [Ansible results](docs/runbooks/ansible-deployments.md#verified-rehearsals--13-november-2026) |
-| Infrastructure monitoring | WSL host metrics, 16 containers, and four readiness probes checked | [Recorded sequence](docs/evidence.md#infrastructure-monitoring-sequence) |
-| Alert delivery | Staging proxy and host exporter outages each produced firing and resolved notifications | [Delivery results](docs/runbooks/monitoring-alerts.md#verified-firing-and-recovery-delivery) |
+- CI runs code checks, database tests, dependency auditing, and image checks
+  before publishing the tested image to GitHub Container Registry.
+- Deployment scripts set up the database, apply migrations, and start the API.
+  Production deployment requires the same image to be healthy in staging.
+- Nginx provides a local entry point for each environment. Ansible calls the
+  existing deployment scripts and checks the result.
+- Prometheus and Grafana track API traffic, WSL resources, container usage,
+  and readiness. Alertmanager sends notifications to a local receiver.
+- Recovery exercises cover application rollback, restoring a database backup,
+  and recovering from a failed staging startup.
 
-**Public repository status:** CI checks and image publishing remain enabled.
-The staging, production, and runner-check jobs require a private repository,
-so they are intentionally gated off here. Their historical runs are retained
-as evidence. Local deployment and rollback scripts remain available.
-See [deployment scope](docs/runbooks/actions-deployments.md#public-repository-status).
-
-[Evidence walkthrough](docs/evidence.md) · [Five-minute demo](docs/demo.md)
-
-## Architecture
+## Layout
 
 ```mermaid
 flowchart TD
-    Source["GitHub repository"] --> CI["CI checks and image build"]
-    CI --> Registry["GitHub Container Registry"]
-    Registry --> Runner["Local deployment runner"]
-    Runner -->|Manual staging workflow| Staging["Staging API and PostgreSQL"]
-    Staging -->|Release verified| Promotion["Manual production workflow"]
-    Promotion --> Backup["Production database backup"]
-    Backup --> Production["Production API and PostgreSQL"]
-    Staging -->|Metrics| Prometheus["Prometheus"]
-    Production -->|Metrics| Prometheus
+    Repo["GitHub"] --> CI["Checks and image build"]
+    CI --> Registry["Container registry"]
+    Registry --> Deploy["Local release deployment"]
+    Deploy --> Staging["Staging API and database"]
+    Staging --> Promotion["Staging check and production backup"]
+    Promotion --> Production["Production API and database"]
+    Staging --> Prometheus["Prometheus"]
+    Production --> Prometheus
     Prometheus --> Grafana["Grafana"]
-    Prometheus --> Alertmanager["Alertmanager"]
-    Alertmanager --> Receiver["Local notification receiver"]
+    Prometheus --> Alerts["Alertmanager and local receiver"]
 ```
 
-The diagram shows the tested lab deployment flow. Staging and production
-are separate Compose projects on one laptop. Production promotion reuses
-the image verified in staging and creates a database backup before deployment.
-The Actions deployment jobs are gated off in this public repository.
-For current local operation, Ansible calls the existing deployment and backup
-scripts and verifies their results. Its inventory represents the single WSL
-host; see the [Ansible runbook](docs/runbooks/ansible-deployments.md).
+The recorded Actions deployments ran while the repository was private.
+CI and image publishing still run publicly, but deployment jobs retain their
+private-repository guard. Current local deployments use the scripts or Ansible.
+See [Actions deployment scope](docs/runbooks/actions-deployments.md#public-repository-status).
 
-## Local HTTP access
+## Run locally
 
-Nginx was added after the deployment and recovery exercises. Each proxy
-joins only its own environment's Docker network and forwards to the API.
-The existing application release remains `a56088c1b7bb` (version `0.1.2`).
+You need Docker Compose and Bash. On Windows, use WSL with Docker Desktop
+integration enabled. Tests use Python 3.14 and uv.
 
-| Environment | Nginx entry point | Direct API for troubleshooting |
-| --- | --- | --- |
-| Staging | http://127.0.0.1:8082 | http://127.0.0.1:8002 |
-| Production | http://127.0.0.1:8083 | http://127.0.0.1:8003 |
-
-These are local HTTP endpoints without TLS or authentication. Direct API
-access bypasses the proxy's request limits. Prometheus still scrapes the
-APIs directly. See the [Nginx runbook](docs/runbooks/reverse-proxy.md) for
-startup, validation, runtime settings, troubleshooting, and recorded results.
-
-## Monitoring preview
-
-![Grafana showing production and staging scrape targets UP and request traffic](docs/images/grafana-overview.png)
-
-Captured on 13 November 2026 from the local lab. This is a recorded view,
-not a live hosted dashboard. [View all dashboard panels](docs/evidence.md#monitoring-screenshots).
-
-## Current features
-
-- Create and retrieve tickets.
-- List tickets with status filtering and pagination.
-- Change ticket status to open, in progress, or resolved.
-- Check application liveness and database readiness.
-- Run database setup repeatedly without removing existing tickets.
-- Run unit tests and PostgreSQL integration tests.
-- Access staging and production through separate local Nginx proxies.
-
-## Requirements
-
-To run the containers:
-
-- Docker with Docker Compose
-- Bash, available in Linux or WSL
-- Available host ports 8001 and 55432
-
-To run tests locally:
-
-- Python 3.14
-- uv
-- Available host port 55433 for the test database
-
-On Windows, run the commands below inside WSL with Docker Desktop integration enabled.
-
-## First-time setup
-
-Run these commands from the repository root.
-
-Create a local configuration file:
+From the repository root:
 
 ```bash
 cp -n .env.example .env
@@ -125,285 +60,68 @@ chmod 600 .env
 nano .env
 ```
 
-Set separate, nonempty values for:
-
-- `POSTGRES_PASSWORD`: database administrator password
-- `APP_DB_PASSWORD`: application account password
-
-Keep the other development settings from the example. Do not commit `.env`.
-
-If `.env` already exists, use its existing credentials. Editing a password in the file does not change an existing database account's password.
-
-Start the application:
+Set different, nonempty values for `POSTGRES_PASSWORD` and `APP_DB_PASSWORD`.
+If the database already exists, keep its current credentials: editing `.env`
+does not change database passwords.
 
 ```bash
 ./scripts/start_local.sh
+curl --fail http://127.0.0.1:8001/health/ready
 ```
 
-The script:
+The development API docs are at <http://localhost:8001/docs>.
+[Local setup](docs/setup.md) covers endpoints, test database settings, and daily commands.
+This starts the development API and database; use the runbooks below for the other services.
 
-1. Checks the Compose configuration.
-2. Builds the application image.
-3. Starts PostgreSQL and waits for its health check.
-4. Creates the application role and schema if needed, then applies permissions.
-5. Applies pending database migrations.
-6. Starts the API and waits for readiness.
+## Checks and recorded results
 
-API documentation: http://localhost:8001/docs
-
-Check readiness:
+Run the default code checks:
 
 ```bash
-curl -i http://localhost:8001/health/ready
+./scripts/check.sh
 ```
 
-## API endpoints
+At commit `13d65a6`, the local suite passed **103 tests**, with the two database
+integration tests skipped by default. Both database tests ran successfully in
+[CI run 43427425933](https://github.com/Szin7/application-operations-platform/actions/runs/43427425933),
+which also passed the infrastructure checks and published the tested image.
+See [Local setup](docs/setup.md#prepare-the-test-database) to run those tests locally.
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| GET | `/` | Service name |
-| GET | `/version` | Application version |
-| GET | `/health/live` | Application responsiveness |
-| GET | `/health/ready` | Database connection and query |
-| GET | `/metrics` | Request counts and timings for Prometheus |
-| POST | `/tickets` | Create a ticket |
-| GET | `/tickets` | List tickets |
-| GET | `/tickets/{ticket_id}` | Retrieve a ticket |
-| PATCH | `/tickets/{ticket_id}/status` | Change ticket status |
+The lab checks covered a rejected production promotion, backup restoration,
+matched firing and recovery notifications, and a staging startup failure.
+In the last drill, the staging API deliberately exited with code 42; rollback
+restored it, staging ticket data matched, and production protection checks passed.
+The [build record](docs/evidence.md) holds the run links, results, and screenshots.
 
-Example request:
+## Monitoring preview
 
-```bash
-curl -i -X POST http://localhost:8001/tickets \
-  -H 'Content-Type: application/json' \
-  -d '{"title":"Check slow responses","priority":"high"}'
-```
+![Grafana readiness routes, exporter status, and staging proxy recovery](docs/images/grafana-infrastructure-readiness.png)
 
-Use the returned ID when retrieving or updating the ticket.
+Recorded on 13 November 2026. The four readiness routes cover direct and proxied
+access to both environments. The history includes a deliberate staging-proxy
+outage. More [dashboard screenshots](docs/evidence.md#infrastructure-dashboard-screenshots)
+are in the build record.
 
-Priorities: `low`, `medium`, `high`, `critical`.
+## Operating the lab
 
-Statuses: `open`, `in_progress`, `resolved`. Transitions between these statuses are currently unrestricted.
-
-Listing supports `status`, `limit`, and `offset`. Results are ordered newest first, with ID as the tie-breaker. The default page size is 20; the maximum is 100.
-
-## Database access
-
-The API connects using a restricted application account. It can read and write ticket data but cannot create tables in the application schema.
-
-A separate setup container receives administrator credentials for bootstrap and migrations. The API container receives only its application database settings.
-
-PostgreSQL data is stored in a named Docker volume.
-
-## Tests
-
-Install the locked dependencies, including development tools:
-
-```bash
-uv sync --locked
-```
-
-Run the default suite:
-
-```bash
-uv run python -m pytest -v
-```
-
-The two database integration tests are skipped unless explicitly enabled.
-
-### Prepare the test database
-
-Create a separate configuration file:
-
-```bash
-cp -n .env.example .env.test
-chmod 600 .env.test
-nano .env.test
-```
-
-Use these settings, plus separate passwords for both test accounts:
-
-| Variable | Test value |
+| Task | Guide |
 | --- | --- |
-| POSTGRES_DB | appops_test |
-| POSTGRES_USER | postgres |
-| POSTGRES_PORT | 55433 |
-| APP_DB_HOST | 127.0.0.1 |
-| APP_DB_PORT | 55433 |
-| APP_DB_NAME | appops_test |
-| APP_DB_USER | appops_test_app |
+| Start development and run tests | [Local setup](docs/setup.md) |
+| Deploy a release or roll back the API | [Deployment and rollback](docs/runbooks/deployment-rollback.md) |
+| Work with registry images | [Registry releases](docs/runbooks/registry-releases.md) |
+| Read the historical Actions deployment procedure | [GitHub Actions](docs/runbooks/actions-deployments.md) |
+| Deploy locally with Ansible | [Ansible](docs/runbooks/ansible-deployments.md) |
+| Back up or restore PostgreSQL | [Backup and restore](docs/runbooks/backup-restore.md) |
+| Start the local proxies | [Nginx](docs/runbooks/reverse-proxy.md) |
+| Monitor application traffic | [Application monitoring](docs/runbooks/monitoring.md) |
+| Collect host, container, and readiness metrics | [Infrastructure monitoring](docs/runbooks/infrastructure-monitoring.md) |
+| Check alerts and notification delivery | [Monitoring alerts](docs/runbooks/monitoring-alerts.md) |
+| Audit locked Python dependencies | [Dependency checks](docs/runbooks/dependency-checks.md) |
+| Repeat the staging recovery drill | [Staging recovery](docs/runbooks/staging-recovery.md) |
+| Inspect the running services without a failure drill | [Service check](docs/demo.md) |
 
-Start and prepare the test database:
+Staging uses ports **8082** through Nginx and **8002** directly. Production uses
+**8083** through Nginx and **8003** directly. All bind to local loopback addresses.
 
-```bash
-docker compose --env-file .env.test -p application-operations-test up -d --wait --wait-timeout 120 db
-uv run --env-file .env.test python scripts/bootstrap_db.py
-uv run --env-file .env.test alembic upgrade head
-```
-
-Run all tests:
-
-```bash
-RUN_DB_TESTS=1 uv run --env-file .env.test python -m pytest -v
-```
-
-The integration tests verify the database name and account before running. They require an empty test ticket table and remove only the rows they create.
-
-The current suite has 105 tests. The integration tests cover persisted changes, filtering, ordering, and pagination.
-
-Check Python code:
-
-```bash
-uv run ruff check app tests migrations scripts
-uv run ruff format --check app tests migrations scripts
-```
-
-## Daily commands
-
-Start or update the local environment:
-
-```bash
-./scripts/start_local.sh
-```
-
-Check services and recent API logs:
-
-```bash
-docker compose ps
-docker compose logs --tail=50 api
-```
-
-Stop the development services while keeping their data:
-
-```bash
-docker compose stop
-```
-
-Stop the test database:
-
-```bash
-docker compose --env-file .env.test -p application-operations-test stop db
-```
-
-## Runtime settings
-
-The API image runs as user 10001. Compose gives it a read-only root filesystem, writable temporary storage, and no Linux capabilities.
-
-Local environment files and development tools are excluded from the application image.
-
-The API connects to `db:5432` inside the Compose network. Host-side database tools use `127.0.0.1:55432`.
-
-## Continuous integration
-
-GitHub Actions runs on pushes to `main`, pull requests, and manual requests.
-
-The workflow uses Python 3.14, locked dependencies, and a fresh PostgreSQL
-test database. It prepares the application account and applies migrations
-before running the database tests.
-
-| Check | First verified result |
-| --- | --- |
-| Python linting and formatting | Passed |
-| Shell script syntax | Passed |
-| Unit test step | 33 passed; 2 integration tests intentionally skipped |
-| PostgreSQL integration step | 2 passed |
-| Docker image build | Passed |
-| Image checks | UID 10001; local environment files, pytest, and Ruff absent; version matched project metadata |
-
-All 35 tests in that first CI run ran across the two test steps. The current
-suite includes additional operational recovery tests.
-
-[First successful CI run](https://github.com/Szin7/application-operations-platform/actions/runs/43276857853)
-verified commit `26f90315c1593f92fd6eb5704434090437895fb2` on
-12 November 2026.
-
-After checks pass on `main`, the workflow publishes the tested image to
-GitHub Container Registry. Pull requests run checks without publishing.
-The private-lab staging and production workflows were manually triggered;
-their jobs are gated off while this repository is public.
-
-See [Registry releases](docs/runbooks/registry-releases.md) for release
-commands and the first verified deployment from GHCR.
-
-## Monitoring
-
-Prometheus collects metrics from staging and production. A provisioned
-Grafana dashboard shows scrape status, request traffic, server errors,
-and response times, with an environment selector.
-
-The second dashboard shows WSL host resources, container CPU and memory,
-and direct/proxied readiness. Node Exporter uses a documented local build
-for WSL mount parsing. cAdvisor reads the tested cgroup v2 layout without
-runtime sockets, and Blackbox Exporter checks HTTP status and readiness body.
-
-Alertmanager forwards firing and recovery notifications to a local receiver.
-Separate staging API, staging proxy, and host exporter outage exercises
-verified delivery. The resource thresholds are initial lab settings.
-
-See the [monitoring runbook](docs/runbooks/monitoring.md) for setup,
-dashboard details, notification delivery, and troubleshooting.
-See [Infrastructure monitoring](docs/runbooks/infrastructure-monitoring.md)
-for the startup order, CI coverage, and WSL-specific limits.
-
-## Deployments and rollback
-
-Manual staging deployment and production promotion through GitHub Actions
-were verified in the private lab. The private-repository guards remain in
-place, so new deployment jobs skip in this public repository. See
-[Deploy through GitHub Actions](docs/runbooks/actions-deployments.md) for
-the execution scope, historical procedure, and verified runs.
-
-See [Deployment and application rollback](docs/runbooks/deployment-rollback.md) for release commands and verified results.
-The [staging recovery drill](docs/runbooks/staging-recovery.md) covers a
-controlled startup configuration failure and restoration of the saved image.
-
-## Ansible deployments
-
-Ansible was added after the Nginx integration. The playbooks check the
-prepared lab and selected image, require a matching healthy staging release
-before production, create a production backup, and verify the result.
-They reuse the existing bootstrap and migration procedure.
-
-The first staging and production runs rehearsed release `a56088c1b7bb`
-(version `0.1.2`). See [Deploy with Ansible](docs/runbooks/ansible-deployments.md)
-for prerequisites, commands, check-mode behavior, and recorded results.
-
-## Dependency checks
-
-CI audits the locked runtime and development Python dependencies before
-building the image. Known vulnerabilities, scanner errors, and incomplete
-reports fail the check and block publishing. Reports are retained as CI
-artifacts. Run the same check locally with `./scripts/check_dependencies.sh`.
-
-The initial Linux/Python 3.14 scan audited 31 packages with no skips or known
-vulnerabilities reported. See [Python dependency checks](docs/runbooks/dependency-checks.md)
-for the recorded baseline, failure handling, and coverage limits.
-
-## Backup and restore
-
-See [Database backup and restore](docs/runbooks/backup-restore.md) for the procedure and verified results.
-
-## Project status
-
-Verified locally:
-
-- Application endpoints, migrations, and restricted database access.
-- CI checks, database integration tests, and image publishing.
-- Manual staging deployment and production promotion through Actions in the private lab.
-- Application rollback and preservation of the original production ticket.
-- Controlled staging startup failure and rollback, with staging data preserved
-  and production protection checks passing.
-- Rejection of an invalid promotion before backup or deployment.
-- Production backup recovery into a separate test database, including
-  application access, migration revision, and ticket comparison.
-- Prometheus collection, Grafana, and local firing and recovery notifications.
-- Nginx routing, application error forwarding, request-size limits, and runtime restrictions.
-- Ansible preflight and same-release staging/production deployment rehearsals.
-- A baseline audit of locked Python dependencies: 31 packages, no skips or known vulnerabilities reported.
-- WSL CPU, memory, and filesystem comparisons, plus resource metrics for 16 lab containers.
-- Four direct/proxied readiness probes, ten infrastructure dashboard queries, and two additional alert-delivery drills.
-
-### Scope
-
-This is a local lab on one laptop. See [Scope and limitations](docs/limitations.md)
-for deployment, recovery, and monitoring boundaries.
+This is a single-laptop lab. The [scope and limitations](docs/limitations.md)
+cover local access, backups, deployment guards, and what the recovery checks establish.

@@ -1,194 +1,170 @@
-# Project evidence
+# Build record
 
-This page brings together the recorded lab checks and dashboard screenshots.
-Staging, production, databases, and monitoring ran on one laptop. There is
-no public application or Grafana endpoint.
+The work below ran on one WSL laptop on 12–13 November 2026. This page keeps
+the build order, test results, and screenshots together. Dates and times are
+UTC, matching GitHub and the local record filenames.
 
-CI checks and image publishing remain enabled in the public repository.
-The Actions deployment and runner-check jobs are intentionally gated off
-by their private-repository condition. The Actions deployment runs below
-were completed while the repository was private. The later Ansible rehearsals
-ran locally in WSL.
+## Build order
+
+These are checkpoints from the commit history. Related commits are grouped
+for readability; the dates are commit dates, not estimates of time spent.
+
+| Date (UTC) | Work added | Commit checkpoint |
+| --- | --- | --- |
+| 12 Nov | API, database readiness, ticket migration, and database tests | [`9e9bcc5`](https://github.com/Szin7/application-operations-platform/commit/9e9bcc5) |
+| 12 Nov | API and PostgreSQL in Compose | [`9a76d61`](https://github.com/Szin7/application-operations-platform/commit/9a76d61) |
+| 12 Nov | Database backup and restore scripts | [`0ea2bcf`](https://github.com/Szin7/application-operations-platform/commit/0ea2bcf) |
+| 12 Nov | Separate staging and production settings | [`703d57a`](https://github.com/Szin7/application-operations-platform/commit/703d57a) |
+| 12 Nov | Release deployment, then application rollback | [`0db0375`](https://github.com/Szin7/application-operations-platform/commit/0db0375), [`b12c5df`](https://github.com/Szin7/application-operations-platform/commit/b12c5df) |
+| 12 Nov | CI checks, then publishing tested images | [`26f9031`](https://github.com/Szin7/application-operations-platform/commit/26f9031), [`4f28d94`](https://github.com/Szin7/application-operations-platform/commit/4f28d94) |
+| 12 Nov | Request metrics, Prometheus, Grafana, and local alert delivery | [`74191c7`](https://github.com/Szin7/application-operations-platform/commit/74191c7) through [`a56088c`](https://github.com/Szin7/application-operations-platform/commit/a56088c) |
+| 12–13 Nov | Local runner checks and manual Actions deployments | [`e3c2e84`](https://github.com/Szin7/application-operations-platform/commit/e3c2e84) through [`27e0c00`](https://github.com/Szin7/application-operations-platform/commit/27e0c00) |
+| 13 Nov | Nginx proxies | [`9075ca3`](https://github.com/Szin7/application-operations-platform/commit/9075ca3) |
+| 13 Nov | Ansible deployment rehearsals | [`598ba82`](https://github.com/Szin7/application-operations-platform/commit/598ba82) |
+| 13 Nov | Python dependency audit in CI | [`4ae2a4f`](https://github.com/Szin7/application-operations-platform/commit/4ae2a4f) |
+| 13 Nov | Host, container, and readiness monitoring | [`1ecf2ff`](https://github.com/Szin7/application-operations-platform/commit/1ecf2ff) |
+| 13 Nov | Failed staging startup and recovery | [`13d65a6`](https://github.com/Szin7/application-operations-platform/commit/13d65a6) |
+
+The application deployed in the later exercises stayed at `a56088c1b7bb`,
+version `0.1.2`. Later commits added operations tooling and documentation.
+Publishing their images did not update the running applications.
 
 ## Delivery checks
 
-| Check | Recorded result | Evidence |
-| --- | --- | --- |
-| CI and image publishing | Passed for monitoring integration commit `1ecf2ff` | [Run 43423286458](https://github.com/Szin7/application-operations-platform/actions/runs/43423286458) |
-| CI for the deployed release | Passed for release `a56088c1b7bb` | [Run 43302633612](https://github.com/Szin7/application-operations-platform/actions/runs/43302633612) |
-| Staging deployment | Exact release verified; production not restarted | [Run 43344606433](https://github.com/Szin7/application-operations-platform/actions/runs/43344606433) |
-| Production promotion | Backup created; original ticket preserved; staging not restarted | [Run 43347528825](https://github.com/Szin7/application-operations-platform/actions/runs/43347528825) |
-| Invalid promotion | Expected rejection before backup and deployment | [Run 43351535975](https://github.com/Szin7/application-operations-platform/actions/runs/43351535975) |
+CI and image publishing remain enabled publicly. The staging and production
+Actions runs below took place while the repository was private. Their jobs
+now skip because of the private-repository guard.
 
-The CI run for monitoring integration commit `1ecf2ff` did not deploy a new application release.
-The recorded staging and production deployments used release
-`a56088c1b7bb`, application version `0.1.2`.
+| Check | Result | Run |
+| --- | --- | --- |
+| Final recovery-integration CI | Checks and image publishing passed for `13d65a6`, including both database integration tests | [43427425933](https://github.com/Szin7/application-operations-platform/actions/runs/43427425933) |
+| Monitoring-integration CI | Checks and publishing passed for `1ecf2ff` | [43423286458](https://github.com/Szin7/application-operations-platform/actions/runs/43423286458) |
+| CI for the deployed release | Passed for `a56088c1b7bb` | [43302633612](https://github.com/Szin7/application-operations-platform/actions/runs/43302633612) |
+| Staging deployment | Release checked; production not restarted | [43344606433](https://github.com/Szin7/application-operations-platform/actions/runs/43344606433) |
+| Production promotion | Backup created; original ticket preserved | [43347528825](https://github.com/Szin7/application-operations-platform/actions/runs/43347528825) |
+| Invalid promotion | Rejected before backup or deployment | [43351535975](https://github.com/Szin7/application-operations-platform/actions/runs/43351535975) |
 
 ### Why one workflow is red
 
-Run `43351535975` deliberately supplied a CI run where a successful staging
-deployment run was required. It failed at **Read the successful staging
-deployment** with:
+The promotion test supplied a CI run where a successful staging deployment
+run was required. The workflow rejected it with:
 
 > Choose a successful staging deployment from main.
 
-The backup and deployment steps were skipped. A separate local comparison
-confirmed that the staging and production containers, readiness, versions,
-production ticket, saved release, and backup directories were unchanged.
-The verification passed because the invalid request was rejected.
-
-See the [rejection record](runbooks/actions-deployments.md#verified-rejection-check)
-for the scope and local evidence filename. This was one wrong-workflow test,
-not exhaustive testing of every invalid input.
+Backup and deployment were skipped. Local comparisons found no change to
+the containers, readiness, versions, production ticket, saved release, or
+backup directories. This checked one wrong-workflow input. The
+[rejection record](runbooks/actions-deployments.md#verified-rejection-check)
+has the details.
 
 ## Recovery checks
 
-On 13 November 2026, production backup `20261113T014802Z-JkSafR` was
-restored into a separate database in the test PostgreSQL container.
+The first application rollback restored the previous image without changing
+the database schema. The original ticket survived the switch. See the
+[12 November rollback result](runbooks/deployment-rollback.md#verified-exercise-12-november-2026).
 
-| Check | Recorded result |
-| --- | --- |
-| Archive checksum | Passed |
-| Recovered database | `appops_restore_20261113022643` |
-| Migration revision | `0001` |
-| Application access | Verified as `appops_test_app` |
-| Recovered ticket | One ticket; every returned field matched |
-| Recovered readiness | Passed through FastAPI TestClient |
-| Running production | Containers unchanged; readiness and original ticket passed |
+On 13 November, production backup `20261113T014802Z-JkSafR` was restored into
+`appops_restore_20261113022643` in the test PostgreSQL container. The archive
+checksum passed, migration revision was `0001`, application access worked as
+`appops_test_app`, and every field of the demonstration ticket matched.
+Readiness passed through FastAPI TestClient. Production stayed on its original
+database and its container and ticket checks passed.
 
-These results are documented in the
-[production recovery runbook](runbooks/backup-restore.md#verified-production-backup-recovery).
-The database archive and raw local evidence JSON are excluded from Git.
-Recovery covered the current schema and one demonstration ticket; production
-was not switched to the recovered database.
-
-The earlier [application rollback exercise](runbooks/deployment-rollback.md#verified-exercise-12-november-2026)
-restored the previous application image and preserved the original ticket.
-It used an unchanged database schema.
+The [backup runbook](runbooks/backup-restore.md#verified-production-backup-recovery)
+contains the procedure and results. This was a separate-database restore with
+one demonstration ticket, not a production database switch.
 
 ## Nginx integration
 
-On 13 November 2026, Nginx was added after the recorded deployment and
-recovery checks. The order was image verification, staging proxy and routing
-checks, production proxy and routing checks, then runtime verification.
-The application release remained `a56088c1b7bb`, version `0.1.2`.
+The staging proxy was checked first, then production. Both passed readiness,
+route and query forwarding, matching 404 and 422 responses, and a 413 response
+for oversized requests. The API and database containers were unchanged.
 
-Both proxies passed readiness, route/query forwarding, matching 404 and 422
-responses, and rejection of oversized requests with 413. Runtime checks
-confirmed the non-root user, read-only settings, capability and privilege
+Runtime checks covered the non-root user, read-only settings, capability
 restrictions, resource limits, rotating logs, loopback ports, and separate
-application networks. Existing API and database containers stayed unchanged
-across proxy startup.
-
-The local record `backups/proxy-check-20261113T042015231868Z.json` contains
-runtime, request-size, and readiness checks plus configuration hashes.
-Routing and startup comparisons were reviewed separately from terminal
-output. See the [Nginx runbook](runbooks/reverse-proxy.md) for details and
-limits. This integration did not rerun the earlier deployment, rollback,
-monitoring alert, or backup-recovery exercises.
+networks. The record is
+`backups/proxy-check-20261113T042015231868Z.json`.
+See [Nginx](runbooks/reverse-proxy.md) for commands and configuration details.
 
 ## Ansible deployment rehearsals
 
-Ansible was added after Nginx and verified on 13 November 2026. The sequence
-was preflight, staging check mode and live run, then production check mode
-and live run. All runs finished with zero failures and unreachable hosts.
-Both live runs retained release `a56088c1b7bb`, version `0.1.2`.
+Ansible reused the deployment scripts after Nginx was working. Staging and
+production each passed check mode and a live same-release rehearsal. Both
+retained `a56088c1b7bb`; all runs ended with zero failures or unreachable hosts.
 
-| Check | Recorded result |
-| --- | --- |
-| Check mode | Zero changes for staging and production; deployment and backup skipped |
-| Staging rehearsal | Passed; two reported changes: deployment procedure and evidence file |
-| Production rehearsal | Passed; three reported changes: backup, deployment procedure, and evidence file |
-| Production backup | `backups/20261113T050247Z-OWcabu`, created before deployment |
-| Post-deployment checks | Readiness, image/version, saved release, original production ticket, and protected containers passed |
+Check mode made no changes. The staging live run reported two changes;
+production reported three, including backup
+`backups/20261113T050247Z-OWcabu`. Readiness, image/version, saved release,
+production ticket, and protected-container checks passed.
 
-Local evidence records, in execution order:
-
-- `backups/ansible-deploy-staging-20261113T050021364380Z.json`
-- `backups/ansible-deploy-production-20261113T050313711191Z.json`
-
-The filenames use UTC. The records contain configuration hashes and
-verification results, without credentials or ticket contents, and remain
-excluded from Git. See [Deploy with Ansible](runbooks/ansible-deployments.md)
-for the full procedure and recaps. These same-release rehearsals do not
-establish upgrade, new-migration, container-replacement, or failure-recovery
-behavior. The newly created backup was not restored in this exercise.
+These rehearsals did not exercise a new migration or restore the new backup.
+[Ansible deployment notes](runbooks/ansible-deployments.md#verified-rehearsals--13-november-2026)
+include both local record filenames and the full procedure.
 
 ## Python dependency baseline
 
-After the Ansible rehearsals, the locked runtime and development dependencies
-were audited in WSL on 13 November 2026 using `pip-audit 2.10.1`.
-The scan covered 31 applicable Python packages, skipped none, and reported
-no known vulnerabilities. The checkout was `598ba82`, and the working tree
-remained clean.
+The first audit used `pip-audit 2.10.1` against checkout `598ba82` in WSL.
+It checked 31 applicable locked Python packages, skipped none, and reported
+no known vulnerabilities. Its local output is in
+`backups/dependency-audit-20261113T052751Z-HgBtxd`.
 
-Evidence was saved locally in
-`backups/dependency-audit-20261113T052751Z-HgBtxd`. This is a point-in-time
-check of the checkout's lockfile, not a scan of the running container images.
-See [Python dependency checks](runbooks/dependency-checks.md) for the CI gate,
-report files, and coverage limits. The dependency audit subsequently passed
-in [CI run 43423286458](https://github.com/Szin7/application-operations-platform/actions/runs/43423286458)
-for commit `1ecf2ff`.
-
-## Staging startup failure and recovery
-
-On 13 November 2026, a controlled startup configuration fault was applied only
-to the staging API using saved release `a56088c1b7bb`. The command exited with
-code 42, and both staging routes became unavailable. The existing rollback
-script restored the saved image, and all four readiness routes passed.
-
-The staging migration revision and all staging ticket rows were unchanged.
-Protected containers and production settings were unchanged, and the original
-production ticket matched at the sampled protection checks. The local code
-check passed: 103 tests passed and two opt-in database integration tests were
-skipped.
-
-The drill saved a `passed` result at
-`backups/staging-recovery-20261113T123703731666Z/evidence.json`.
-See the [staging recovery runbook](runbooks/staging-recovery.md#verified-exercise--13-november-2026)
-for the procedure, recovery behavior, and verified scope. The failure used a
-temporary startup command on the existing image; it was not a GitHub Actions
-image-promotion test. Raw records remain outside Git.
+This is a dated result for Python dependencies, not a container-image scan.
+The audit then passed as part of the CI runs linked above. See
+[Dependency checks](runbooks/dependency-checks.md) for coverage and failure handling.
 
 ## Infrastructure monitoring sequence
 
-The following checks ran on 13 November 2026, after the dependency-audit
-integration. Times below are UTC, matching the local evidence filenames.
-All services remained on the same laptop.
+Host metrics needed extra work on WSL: the original filesystem collector
+failed on the mount format. The local Node Exporter build uses the released
+procfs fix and tests the failing format. cAdvisor collects from cgroup v2
+because the tested runtime socket paths were unavailable. The
+[exporter build notes](../deploy/node-exporter/README.md) and
+[container runbook](runbooks/container-monitoring.md#why-this-configuration)
+explain those choices.
 
-| Time (UTC) | Step | Recorded result |
+The live checks ran in this order on 13 November:
+
+| Time (UTC) | Check | Result |
 | --- | --- | --- |
-| 06:57 | WSL host exporter | Five collectors passed; 12 CPUs, memory total, and two filesystem identities/capacities matched WSL |
-| 07:05 | Host scrape | Prometheus ingested the checked host metrics |
-| 07:35 | Container collection | CPU, memory, and freshness passed for the then-running 15 containers |
-| 07:46 | Readiness collection | Four HTTP/body probes passed; all 16 lab containers were checked |
-| 11:17 | Resume after the pause | All 16 existing containers recovered with preserved IDs and images; collection and readiness passed again |
-| 11:35 | Alert rules | All 11 rules evaluated without errors and were inactive |
-| 11:42–11:47 | Delivery drills | Staging proxy, then host exporter: firing and matching recovery notifications received |
-| 11:56 | Dashboard queries | Ten panel queries and both readiness filters passed; all existing containers unchanged |
+| 06:57 | WSL host metrics | Five collectors passed; 12 CPUs, memory, and two filesystems matched WSL |
+| 07:05 | Host scrape | Prometheus ingested those metrics |
+| 07:35 | Container metrics | CPU, memory, and freshness passed for 15 running containers |
+| 07:46 | Readiness probes | Four HTTP/body probes passed; 16 lab containers checked |
+| 11:17 | Resume after a pause | Existing container IDs and images preserved; collection and readiness passed |
+| 11:35 | Alert rules | All 11 loaded rules were healthy and inactive |
+| 11:42–11:47 | Alert delivery | Staging proxy and host exporter each produced firing and matching resolved notifications |
+| 11:56 | Dashboard queries | Ten panel queries and both readiness filters passed |
 
-The two delivery drills deliberately restarted only their selected targets.
-Production stayed ready through direct and proxied routes, and every
-returned field of the original production ticket matched throughout.
-The running application release remained `a56088c1b7bb`, version `0.1.2`.
+Each outage drill restarted only its selected target. Production readiness
+and original-ticket checks passed. Local records remain under `backups/`;
+procedures and record names are in the
+[infrastructure](runbooks/infrastructure-monitoring.md),
+[alert](runbooks/monitoring-alerts.md), and
+[dashboard](runbooks/infrastructure-dashboard.md) runbooks.
 
-Key local records:
+## Staging startup failure and recovery
 
-- `backups/node-exporter-check-20261113T065751619929Z.json`
-- `backups/container-monitoring-check-20261113T073505550400Z.json`
-- `backups/readiness-monitoring-check-20261113T074611176825Z.json`
-- `backups/readiness-monitoring-check-20261113T111736928158Z.json`
-- `backups/monitoring-alerts-check-20261113T113531130273Z.json`
-- `backups/alert-delivery-check-20261113T114254887139Z.json`
-- `backups/infrastructure-dashboard-check-20261113T115608574538Z.json`
+After monitoring was complete, the staging API was given a temporary startup
+command that exited with code 42. Both staging routes became unavailable.
+The existing rollback script restored the saved image; all four readiness
+routes then passed. The staging migration and all ticket rows matched their
+starting values. Protected containers and production settings were unchanged,
+and the original production ticket matched at each sampled protection check.
 
-These raw records stay local. See the [infrastructure runbook](runbooks/infrastructure-monitoring.md)
-for startup and verification, and the [alert runbook](runbooks/monitoring-alerts.md)
-for the distinction between synthetic resource tests and live delivery drills.
-The monitoring integration passed [CI run 43423286458](https://github.com/Szin7/application-operations-platform/actions/runs/43423286458)
-for commit `1ecf2ff`. Checks and image publishing completed successfully,
-including the fresh exporter build and PostgreSQL integration tests.
-This did not redeploy the running applications.
+The result is in
+`backups/staging-recovery-20261113T123703731666Z/evidence.json`.
+The [recovery runbook](runbooks/staging-recovery.md#verified-exercise--13-november-2026)
+explains the temporary configuration fault and cleanup. The local test run
+passed 103 tests and skipped the two opt-in database integration tests.
+Those two tests subsequently passed in CI.
+
+A final monitoring check at 12:42 UTC found fresh metrics for all 16 lab
+containers, including the replacement staging API. All ten dashboard queries
+and both environment filters passed. Its record is
+`backups/infrastructure-dashboard-check-20261113T124209764681Z.json`.
+
+Raw logs, database archives, and JSON records stay local and are excluded from
+Git. The summaries here describe the recorded checks, not a live status page.
 
 ## Infrastructure dashboard screenshots
 
@@ -251,4 +227,4 @@ HTTP 200 responses for the displayed requests.
 
 ![Grafana showing requests grouped by route and HTTP status](images/grafana-routes-status.png)
 
-For a short walkthrough, follow the [five-minute demo](demo.md).
+To inspect the running lab, use the [service check](demo.md).
