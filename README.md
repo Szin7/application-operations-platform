@@ -253,6 +253,8 @@ dashboard details, notification delivery, and troubleshooting.
 
 ## Deployments and rollback
 
+Staging deployment and production promotion can be started manually through GitHub Actions. See [Deploy through GitHub Actions](docs/runbooks/actions-deployments.md) for the commands and verified runs.
+
 See [Deployment and application rollback](docs/runbooks/deployment-rollback.md) for release commands and verified results.
 
 ## Backup and restore
@@ -276,4 +278,4 @@ A staging outage check confirmed that the scrape alert fires and clears after re
 
 Local webhook notification delivery has been verified.
 
-Deployment from CI is planned work. Notifications currently stay on the local machine.
+Manual deployment through GitHub Actions has been verified for staging and production. Notifications currently stay on the local machine.
