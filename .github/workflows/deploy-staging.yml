@@ -1,0 +1,189 @@
+name: Deploy staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: Successful CI run to deploy
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  packages: read
+
+concurrency:
+  group: appops-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy the tested image to staging
+    if: >-
+      github.ref == 'refs/heads/main'
+      && github.event.repository.private == true
+      && github.actor == github.repository_owner
+      && github.triggering_actor == github.repository_owner
+    runs-on: [self-hosted, Linux, X64, appops-deploy]
+    timeout-minutes: 15
+    env:
+      APP_DEPLOY_ROOT: ${{ vars.APP_DEPLOY_ROOT }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Check the deployment checkout
+        id: before
+        run: |
+          test -n "$APP_DEPLOY_ROOT"
+          cd "$APP_DEPLOY_ROOT"
+          test "$(git branch --show-current)" = main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git remote get-url origin)" = "https://github.com/$GITHUB_REPOSITORY.git"
+          test -z "$(git status --porcelain)"
+          test -r .env.staging
+          state="$(docker inspect --format '{{.Id}} {{.Image}} {{.State.StartedAt}}' \
+            application-operations-production-api-1)"
+          printf 'production_state=%s\n' "$state" >> "$GITHUB_OUTPUT"
+
+      - name: Find the image published by CI
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          run_id = os.environ["CI_RUN_ID"]
+          if not re.fullmatch(r"[1-9][0-9]*", run_id):
+              raise SystemExit("Enter a numeric CI run ID.")
+
+          run = json.loads(subprocess.check_output(
+              ["gh", "api", f"repos/{repo}/actions/runs/{run_id}"],
+              text=True, timeout=60,
+          ))
+          if not (
+              run["repository"]["full_name"] == repo
+              and run["path"].split("@", 1)[0] == ".github/workflows/ci.yml"
+              and run["head_branch"] == "main"
+              and run["event"] in ("push", "workflow_dispatch")
+              and run["status"] == "completed"
+              and run["conclusion"] == "success"
+          ):
+              raise SystemExit("Choose a successful main-branch CI run.")
+
+          commit = run["head_sha"]
+          if not re.fullmatch(r"[0-9a-f]{40}", commit):
+              raise SystemExit("The CI run has an invalid source commit.")
+
+          logs = subprocess.check_output(
+              ["gh", "run", "view", run_id, "--repo", repo,
+               "--attempt", str(run["run_attempt"]), "--log"],
+              text=True, timeout=60,
+          )
+          prefix = re.escape(f"ghcr.io/{repo.lower()}@sha256:")
+          images = set(re.findall(
+              rf"Digest reference: ({prefix}[0-9a-f]{{64}})\s*$",
+              logs, re.MULTILINE,
+          ))
+          if len(images) != 1:
+              raise SystemExit("Expected one published image digest in the CI log.")
+
+          registry_image = images.pop()
+          local_image = f"application-operations-platform:{commit[:12]}"
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"commit={commit}\n")
+              output.write(f"registry_image={registry_image}\n")
+              output.write(f"local_image={local_image}\n")
+          print("Source commit:", commit)
+          print("Registry image:", registry_image)
+          PY
+
+      - name: Download and verify the release
+        id: image
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_COMMIT: ${{ steps.release.outputs.commit }}
+          REGISTRY_IMAGE: ${{ steps.release.outputs.registry_image }}
+          LOCAL_IMAGE: ${{ steps.release.outputs.local_image }}
+        run: |
+          docker_endpoint="$(docker context inspect \
+            --format '{{.Endpoints.docker.Host}}' "$(docker context show)")"
+          [[ "$docker_endpoint" == unix://* ]]
+
+          auth_dir="$(mktemp -d "$RUNNER_TEMP/appops-registry.XXXXXX")"
+          trap 'rm -rf -- "$auth_dir"' EXIT
+          export DOCKER_CONFIG="$auth_dir" DOCKER_HOST="$docker_endpoint"
+          unset DOCKER_CONTEXT
+
+          printf '%s' "$GH_TOKEN" |
+            docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker pull "$REGISTRY_IMAGE"
+
+          revision="$(docker image inspect --format \
+            '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$REGISTRY_IMAGE")"
+          source="$(docker image inspect --format \
+            '{{index .Config.Labels "org.opencontainers.image.source"}}' "$REGISTRY_IMAGE")"
+          test "$revision" = "$RELEASE_COMMIT"
+          test "$source" = "https://github.com/$GITHUB_REPOSITORY"
+
+          image_id="$(docker image inspect --format '{{.Id}}' "$REGISTRY_IMAGE")"
+          if docker image inspect "$LOCAL_IMAGE" >/dev/null 2>&1; then
+            test "$(docker image inspect --format '{{.Id}}' "$LOCAL_IMAGE")" = "$image_id"
+          else
+            docker image tag "$image_id" "$LOCAL_IMAGE"
+          fi
+
+          version="$(docker run --rm --pull never --network none --read-only \
+            "$image_id" python -c 'from app.main import APP_VERSION; print(APP_VERSION)')"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          printf 'image_id=%s\nversion=%s\n' "$image_id" "$version" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy staging and check the result
+        env:
+          LOCAL_IMAGE: ${{ steps.release.outputs.local_image }}
+          REGISTRY_IMAGE: ${{ steps.release.outputs.registry_image }}
+          EXPECTED_IMAGE_ID: ${{ steps.image.outputs.image_id }}
+          EXPECTED_VERSION: ${{ steps.image.outputs.version }}
+          PRODUCTION_BEFORE: ${{ steps.before.outputs.production_state }}
+        run: |
+          cd "$APP_DEPLOY_ROOT"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          ./scripts/deploy.sh staging "$LOCAL_IMAGE"
+
+          test "$(docker inspect --format '{{.Image}}' \
+            application-operations-staging-api-1)" = "$EXPECTED_IMAGE_ID"
+          test "$(docker inspect --format '{{.Id}} {{.Image}} {{.State.StartedAt}}' \
+            application-operations-production-api-1)" = "$PRODUCTION_BEFORE"
+
+          python3 - <<'PY'
+          import json
+          import os
+          from urllib.request import urlopen
+
+          def read(port, path):
+              with urlopen(f"http://127.0.0.1:{port}{path}", timeout=10) as response:
+                  assert response.status == 200
+                  return json.load(response)
+
+          assert read(8002, "/health/ready") == {"status": "ready"}
+          assert read(8002, "/version") == {"version": os.environ["EXPECTED_VERSION"]}
+          assert read(8003, "/health/ready") == {"status": "ready"}
+          print("Staging image, version, and readiness: passed")
+          print("Production readiness passed; its container was not restarted.")
+          PY
+
+          {
+            printf '### Staging deployment\n\n'
+            printf 'Image: %s\n\n' "$REGISTRY_IMAGE"
+            printf 'Version: %s\n\n' "$EXPECTED_VERSION"
+            printf 'Readiness passed. Production was not restarted.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
