@@ -17,7 +17,7 @@ The linked Actions deployments ran while the repository was private.
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| CI and image publishing | Passed for Nginx integration commit `9075ca3` | [CI run](https://github.com/Szin7/application-operations-platform/actions/runs/43366053550) |
+| CI and image publishing | Passed for Ansible integration commit `598ba82` | [CI run](https://github.com/Szin7/application-operations-platform/actions/runs/43370353727) |
 | Staging deployment | Verified release; production was not restarted | [Staging run](https://github.com/Szin7/application-operations-platform/actions/runs/43344606433) |
 | Production promotion | Backup created; original ticket preserved | [Production run](https://github.com/Szin7/application-operations-platform/actions/runs/43347528825) |
 | Invalid promotion | Expected rejection; backup and deployment skipped | [Intentional failed run](https://github.com/Szin7/application-operations-platform/actions/runs/43351535975) |
@@ -246,7 +246,7 @@ RUN_DB_TESTS=1 uv run --env-file .env.test python -m pytest -v
 
 The integration tests verify the database name and account before running. They require an empty test ticket table and remove only the rows they create.
 
-The current suite has 52 tests. The integration tests cover persisted changes, filtering, ordering, and pagination.
+The current suite has 61 tests. The integration tests cover persisted changes, filtering, ordering, and pagination.
 
 Check Python code:
 
@@ -308,7 +308,7 @@ before running the database tests.
 | Image checks | UID 10001; local environment files, pytest, and Ruff absent; version matched project metadata |
 
 All 35 tests in that first CI run ran across the two test steps. The current
-suite described above has 52 tests.
+suite described above has 61 tests.
 
 [First successful CI run](https://github.com/Szin7/application-operations-platform/actions/runs/43276857853)
 verified commit `26f90315c1593f92fd6eb5704434090437895fb2` on
@@ -355,6 +355,17 @@ The first staging and production runs rehearsed release `a56088c1b7bb`
 (version `0.1.2`). See [Deploy with Ansible](docs/runbooks/ansible-deployments.md)
 for prerequisites, commands, check-mode behavior, and recorded results.
 
+## Dependency checks
+
+CI audits the locked runtime and development Python dependencies before
+building the image. Known vulnerabilities, scanner errors, and incomplete
+reports fail the check and block publishing. Reports are retained as CI
+artifacts. Run the same check locally with `./scripts/check_dependencies.sh`.
+
+The initial Linux/Python 3.14 scan audited 31 packages with no skips or known
+vulnerabilities reported. See [Python dependency checks](docs/runbooks/dependency-checks.md)
+for the recorded baseline, failure handling, and coverage limits.
+
 ## Backup and restore
 
 See [Database backup and restore](docs/runbooks/backup-restore.md) for the procedure and verified results.
@@ -373,6 +384,7 @@ Verified locally:
 - Prometheus collection, Grafana, and local firing and recovery notifications.
 - Nginx routing, application error forwarding, request-size limits, and runtime restrictions.
 - Ansible preflight and same-release staging/production deployment rehearsals.
+- A baseline audit of locked Python dependencies: 31 packages, no skips or known vulnerabilities reported.
 
 ### Limits
 

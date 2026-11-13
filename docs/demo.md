@@ -60,6 +60,9 @@ Next, show the [Ansible rehearsal results](runbooks/ansible-deployments.md#verif
 Explain the sequence: Nginx was added first, then Ansible coordinated the
 existing deployment scripts and verified the same release in both environments.
 Production backup ran before deployment. Keep this demo read-only.
+Then show the [dependency audit baseline](runbooks/dependency-checks.md#verified-baseline--13-november-2026)
+and the CI dependency-audit step. Explain that it covers known vulnerabilities
+in locked Python dependencies and blocks publishing when the audit fails.
 
 ## 4. Show verification records — 60 seconds
 

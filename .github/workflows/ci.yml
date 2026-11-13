@@ -62,6 +62,22 @@ jobs:
       - name: Run code checks and unit tests
         run: ./scripts/check.sh
 
+      - name: Audit locked Python dependencies
+        id: dependency_audit
+        run: ./scripts/check_dependencies.sh "$RUNNER_TEMP/dependency-audit"
+
+      - name: Upload dependency audit evidence
+        if: >-
+          ${{ !cancelled() &&
+          (steps.dependency_audit.outcome == 'success' ||
+          steps.dependency_audit.outcome == 'failure') }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dependency-audit-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/dependency-audit/
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Check monitoring configuration and alert rules
         run: ./scripts/check_monitoring.sh
 
@@ -106,6 +122,7 @@ jobs:
           assert not list(Path("/app").glob(".env*"))
           assert importlib.util.find_spec("pytest") is None
           assert importlib.util.find_spec("ruff") is None
+          assert importlib.util.find_spec("pip_audit") is None
 
           with Path("/app/pyproject.toml").open("rb") as file:
               project = tomllib.load(file)

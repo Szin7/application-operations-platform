@@ -14,13 +14,13 @@ ran locally in WSL.
 
 | Check | Recorded result | Evidence |
 | --- | --- | --- |
-| CI and image publishing | Passed for Nginx integration commit `9075ca3` | [Run 43366053550](https://github.com/Szin7/application-operations-platform/actions/runs/43366053550) |
+| CI and image publishing | Passed for Ansible integration commit `598ba82` | [Run 43370353727](https://github.com/Szin7/application-operations-platform/actions/runs/43370353727) |
 | CI for the deployed release | Passed for release `a56088c1b7bb` | [Run 43302633612](https://github.com/Szin7/application-operations-platform/actions/runs/43302633612) |
 | Staging deployment | Exact release verified; production not restarted | [Run 43344606433](https://github.com/Szin7/application-operations-platform/actions/runs/43344606433) |
 | Production promotion | Backup created; original ticket preserved; staging not restarted | [Run 43347528825](https://github.com/Szin7/application-operations-platform/actions/runs/43347528825) |
 | Invalid promotion | Expected rejection before backup and deployment | [Run 43351535975](https://github.com/Szin7/application-operations-platform/actions/runs/43351535975) |
 
-The CI run for Nginx integration commit `9075ca3` did not deploy a new application release.
+The CI run for Ansible integration commit `598ba82` did not deploy a new application release.
 The recorded staging and production deployments used release
 `a56088c1b7bb`, application version `0.1.2`.
 
@@ -113,6 +113,21 @@ excluded from Git. See [Deploy with Ansible](runbooks/ansible-deployments.md)
 for the full procedure and recaps. These same-release rehearsals do not
 establish upgrade, new-migration, container-replacement, or failure-recovery
 behavior. The newly created backup was not restored in this exercise.
+
+## Python dependency baseline
+
+After the Ansible rehearsals, the locked runtime and development dependencies
+were audited in WSL on 13 November 2026 using `pip-audit 2.10.1`.
+The scan covered 31 applicable Python packages, skipped none, and reported
+no known vulnerabilities. The checkout was `598ba82`, and the working tree
+remained clean.
+
+Evidence was saved locally in
+`backups/dependency-audit-20261113T052751Z-HgBtxd`. This is a point-in-time
+check of the checkout's lockfile, not a scan of the running container images.
+See [Python dependency checks](runbooks/dependency-checks.md) for the CI gate,
+report files, and coverage limits. The baseline preceded the reusable CI
+check; a later workflow run is needed to verify that integration on GitHub.
 
 ## Monitoring screenshots
 
