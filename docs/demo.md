@@ -2,7 +2,14 @@
 
 Run from the repository root in WSL with Docker, staging, production,
 and monitoring already running. GitHub CLI must be signed in.
-These commands only inspect services and evidence.
+These commands only inspect services and evidence. They are intended for
+the existing lab checkout; its local evidence files are not included in Git.
+For a GitHub-only review, use the [evidence walkthrough](evidence.md).
+
+CI remains enabled in the public repository. The Actions deployment and
+runner-check jobs are gated off by their private-repository condition.
+Use the historical runs below to demonstrate the verified private-lab
+deployments; do not dispatch new deployment runs for this demo.
 
 ## 1. Explain the setup — 30 seconds
 
@@ -77,15 +84,15 @@ show scrape status, traffic, server errors, and response times.
 Use the monitoring runbook to explain the previously verified firing
 and recovery notifications. Keep services running during this short demo.
 
-Finish with the limits: one laptop, no API authentication, manual
-deployments and rollback, local backups, and local notifications.
+Finish with the limits: one laptop, no API authentication, manual local
+deployments and rollback, local backups, and local notifications. Actions
+deployment was verified in the private lab and is gated off publicly.
 
-## Screenshots for a presentation
+## Evidence for a presentation
 
-- Successful CI and production promotion, with their steps visible.
-- Expected rejection with backup and deployment steps skipped.
-- Production recovery verification output.
-- Grafana dashboard with the environment selector visible.
+The [evidence walkthrough](evidence.md) includes the three recorded Grafana
+views, links to CI and deployment runs, and the documented recovery result.
+Use the original Actions pages for deployment and rejection evidence.
 
 Keep credentials, environment-file contents, database archives, and
 raw ticket data out of screenshots and Git.

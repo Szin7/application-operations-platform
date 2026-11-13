@@ -1,10 +1,37 @@
 # Deploy through GitHub Actions
 
 CI checks the application, builds its image, and publishes it to GitHub
-Container Registry. Staging deployment and production promotion use
-separate workflows that are started manually.
+Container Registry. Separate, manually triggered workflows were used for
+the staging and production deployments recorded below.
 
-## Before starting
+## Public repository status
+
+This repository is public. CI runs on GitHub-hosted runners and continues
+to check and publish images. The following jobs use the local self-hosted
+runner and retain the condition `github.event.repository.private == true`:
+
+- `deploy-staging.yml`
+- `deploy-production.yml`
+- `runner-check.yml`
+
+Their jobs skip while the repository is public. This is intentional for the
+public portfolio; the successful deployment records below come from the
+private lab. The workflow definitions are retained for review.
+
+The commands below document that private-lab procedure. They will not
+deploy from this public repository. Keep the private-repository guard in
+place. Any future Actions deployment setup needs a separate review of
+runner access and execution boundaries.
+
+For local deployment and rollback, use the
+[deployment runbook](deployment-rollback.md). Those scripts do not depend
+on the repository being private. They still require the local environment,
+credentials, images, and database setup documented there.
+
+The [evidence walkthrough](../evidence.md) can be reviewed without running
+the deployment workflows.
+
+## Private-lab prerequisites
 
 Keep WSL, Docker Desktop, and the `appops-wsl` runner service running.
 

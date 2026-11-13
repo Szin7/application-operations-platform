@@ -1,8 +1,36 @@
 # Application Operations Platform
 
-A small service-ticket API for practising application deployment and database operations.
+A local DevOps project for deploying, monitoring, and recovering a FastAPI
+ticket service backed by PostgreSQL. It includes CI checks, container image
+publishing, separate staging and production environments, application
+rollback, and database backup recovery.
 
-The application uses FastAPI and PostgreSQL. Docker Compose runs the services, Alembic tracks database changes, and a startup script handles database preparation and migrations.
+Docker Compose runs the services. Alembic tracks schema changes, a restricted
+database account serves the API, and Prometheus, Grafana, and Alertmanager
+provide monitoring and local notifications.
+
+## Verified results
+
+These checks were completed in the local lab on 12–13 November 2026.
+The linked Actions deployments ran while the repository was private.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| CI and image publishing | Passed for documentation commit `e024a55` | [CI run](https://github.com/Szin7/application-operations-platform/actions/runs/43354287536) |
+| Staging deployment | Verified release; production was not restarted | [Staging run](https://github.com/Szin7/application-operations-platform/actions/runs/43344606433) |
+| Production promotion | Backup created; original ticket preserved | [Production run](https://github.com/Szin7/application-operations-platform/actions/runs/43347528825) |
+| Invalid promotion | Expected rejection; backup and deployment skipped | [Intentional failed run](https://github.com/Szin7/application-operations-platform/actions/runs/43351535975) |
+| Application rollback | Previous image restored; original ticket preserved | [Rollback results](docs/runbooks/deployment-rollback.md#verified-exercise-12-november-2026) |
+| Production backup recovery | Separate test database; migration, application access, and ticket checked | [Recovery results](docs/runbooks/backup-restore.md#verified-production-backup-recovery) |
+| Monitoring | Both API scrape targets UP; traffic and response metrics visible | [Dashboard screenshots](docs/evidence.md#monitoring-screenshots) |
+
+**Public repository status:** CI checks and image publishing remain enabled.
+The staging, production, and runner-check jobs require a private repository,
+so they are intentionally gated off here. Their historical runs are retained
+as evidence. Local deployment and rollback scripts remain available.
+See [deployment scope](docs/runbooks/actions-deployments.md#public-repository-status).
+
+[Evidence walkthrough](docs/evidence.md) · [Five-minute demo](docs/demo.md)
 
 ## Architecture
 
@@ -22,11 +50,17 @@ flowchart TD
     Alertmanager --> Receiver["Local notification receiver"]
 ```
 
-Staging and production are separate Compose projects on one laptop.
-Production promotion reuses the image verified in staging and creates
-a database backup before deployment.
+The diagram shows the tested lab deployment flow. Staging and production
+are separate Compose projects on one laptop. Production promotion reuses
+the image verified in staging and creates a database backup before deployment.
+The Actions deployment jobs are gated off in this public repository.
 
-See the [five-minute demo](docs/demo.md) for a walkthrough and evidence.
+## Monitoring preview
+
+![Grafana showing production and staging scrape targets UP and request traffic](docs/images/grafana-overview.png)
+
+Captured on 13 November 2026 from the local lab. This is a recorded view,
+not a live hosted dashboard. [View all dashboard panels](docs/evidence.md#monitoring-screenshots).
 
 ## Current features
 
@@ -250,7 +284,8 @@ before running the database tests.
 | Docker image build | Passed |
 | Image checks | UID 10001; local environment files, pytest, and Ruff absent; version matched project metadata |
 
-All 35 tests ran across the two test steps.
+All 35 tests in that first CI run ran across the two test steps. The current
+suite described above has 52 tests.
 
 [First successful CI run](https://github.com/Szin7/application-operations-platform/actions/runs/43276857853)
 verified commit `26f90315c1593f92fd6eb5704434090437895fb2` on
@@ -258,7 +293,8 @@ verified commit `26f90315c1593f92fd6eb5704434090437895fb2` on
 
 After checks pass on `main`, the workflow publishes the tested image to
 GitHub Container Registry. Pull requests run checks without publishing.
-Staging and production deployments are started manually.
+The private-lab staging and production workflows were manually triggered;
+their jobs are gated off while this repository is public.
 
 See [Registry releases](docs/runbooks/registry-releases.md) for release
 commands and the first verified deployment from GHCR.
@@ -277,7 +313,11 @@ dashboard details, notification delivery, and troubleshooting.
 
 ## Deployments and rollback
 
-Staging deployment and production promotion can be started manually through GitHub Actions. See [Deploy through GitHub Actions](docs/runbooks/actions-deployments.md) for the commands and verified runs.
+Manual staging deployment and production promotion through GitHub Actions
+were verified in the private lab. The private-repository guards remain in
+place, so new deployment jobs skip in this public repository. See
+[Deploy through GitHub Actions](docs/runbooks/actions-deployments.md) for
+the execution scope, historical procedure, and verified runs.
 
 See [Deployment and application rollback](docs/runbooks/deployment-rollback.md) for release commands and verified results.
 
@@ -291,7 +331,7 @@ Verified locally:
 
 - Application endpoints, migrations, and restricted database access.
 - CI checks, database integration tests, and image publishing.
-- Manual staging deployment and production promotion through Actions.
+- Manual staging deployment and production promotion through Actions in the private lab.
 - Application rollback and preservation of the original production ticket.
 - Rejection of an invalid promotion before backup or deployment.
 - Production backup recovery into a separate test database, including
@@ -304,7 +344,8 @@ Staging, production, monitoring, and backups share one laptop. This lab
 does not demonstrate high availability or recovery after losing the laptop.
 
 Authentication is not implemented. The API uses local loopback addresses.
-Deployments and rollback are manual. Release lookup depends on retained
+Local deployments and rollback are manual. Actions deployment jobs are gated
+off in this public repository. Historical release lookup depends on retained
 GitHub Actions logs.
 
 Backups are local and manually triggered; off-machine storage is not

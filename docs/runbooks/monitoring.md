@@ -3,6 +3,9 @@
 Prometheus collects metrics from the staging and production APIs every
 15 seconds. Grafana reads those metrics through a provisioned data source.
 
+Recorded views of all six dashboard panels are available in the
+[evidence walkthrough](../evidence.md#monitoring-screenshots).
+
 ## Local services
 
 | Service | Version | Address |

@@ -5,7 +5,9 @@ and checks its contents and runtime user.
 
 After successful checks on main, a separate job publishes that same image
 to GitHub Container Registry. Pull requests run checks without publishing.
-Deployments to staging and production are started manually.
+The local scripts below deploy to staging and production manually.
+The separate Actions deployment jobs are gated off in this public repository;
+see [Actions deployment scope](actions-deployments.md#public-repository-status).
 
 ## Verified release
 
