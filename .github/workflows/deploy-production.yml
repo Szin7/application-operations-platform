@@ -1,0 +1,216 @@
+name: Promote production
+
+on:
+  workflow_dispatch:
+    inputs:
+      staging_run_id:
+        description: Successful staging deployment run to promote
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: appops-deployment
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Promote the staging release
+    if: >-
+      github.ref == 'refs/heads/main'
+      && github.event.repository.private == true
+      && github.actor == github.repository_owner
+      && github.triggering_actor == github.repository_owner
+    runs-on: [self-hosted, Linux, X64, appops-deploy]
+    timeout-minutes: 15
+    env:
+      APP_DEPLOY_ROOT: ${{ vars.APP_DEPLOY_ROOT }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Check the deployment checkout
+        id: before
+        run: |
+          test -n "$APP_DEPLOY_ROOT"
+          cd "$APP_DEPLOY_ROOT"
+          test "$(git branch --show-current)" = main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git remote get-url origin)" = "https://github.com/$GITHUB_REPOSITORY.git"
+          test -z "$(git status --porcelain)"
+          test -r .env.staging
+          test -r .env.production
+          test -r backups/rollback-check.json
+          state="$(docker inspect --format '{{.Id}} {{.Image}} {{.State.StartedAt}}' \
+            application-operations-staging-api-1)"
+          printf 'staging_state=%s\n' "$state" >> "$GITHUB_OUTPUT"
+
+      - name: Read the successful staging deployment
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STAGING_RUN_ID: ${{ inputs.staging_run_id }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          run_id = os.environ["STAGING_RUN_ID"]
+          if not re.fullmatch(r"[1-9][0-9]*", run_id):
+              raise SystemExit("Enter a numeric staging run ID.")
+
+          run = json.loads(subprocess.check_output(
+              ["gh", "api", f"repos/{repo}/actions/runs/{run_id}"],
+              text=True, timeout=60,
+          ))
+          if not (
+              run["repository"]["full_name"] == repo
+              and run["path"].split("@", 1)[0] == ".github/workflows/deploy-staging.yml"
+              and run["head_branch"] == "main"
+              and run["event"] == "workflow_dispatch"
+              and run["status"] == "completed"
+              and run["conclusion"] == "success"
+          ):
+              raise SystemExit("Choose a successful staging deployment from main.")
+
+          logs = subprocess.check_output(
+              ["gh", "run", "view", run_id, "--repo", repo,
+               "--attempt", str(run["run_attempt"]), "--log"],
+              text=True, timeout=60,
+          )
+          commits = set(re.findall(
+              r"Source commit: ([0-9a-f]{40})\s*$", logs, re.MULTILINE,
+          ))
+          prefix = re.escape(f"ghcr.io/{repo.lower()}@sha256:")
+          images = set(re.findall(
+              rf"Registry image: ({prefix}[0-9a-f]{{64}})\s*$",
+              logs, re.MULTILINE,
+          ))
+          if len(commits) != 1 or len(images) != 1:
+              raise SystemExit("Expected one source commit and image in the staging log.")
+
+          commit = commits.pop()
+          registry_image = images.pop()
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"commit={commit}\n")
+              output.write(f"registry_image={registry_image}\n")
+              output.write(f"local_image=application-operations-platform:{commit[:12]}\n")
+          print("Source commit:", commit)
+          print("Registry image:", registry_image)
+          PY
+
+      - name: Check the staging release and back up production
+        id: checked
+        env:
+          RELEASE_COMMIT: ${{ steps.release.outputs.commit }}
+          REGISTRY_IMAGE: ${{ steps.release.outputs.registry_image }}
+          LOCAL_IMAGE: ${{ steps.release.outputs.local_image }}
+        run: |
+          cd "$APP_DEPLOY_ROOT"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+
+          image_id="$(docker image inspect --format '{{.Id}}' "$REGISTRY_IMAGE")"
+          test "$(docker image inspect --format \
+            '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$REGISTRY_IMAGE")" = "$RELEASE_COMMIT"
+          test "$(docker image inspect --format \
+            '{{index .Config.Labels "org.opencontainers.image.source"}}' "$REGISTRY_IMAGE")" = "https://github.com/$GITHUB_REPOSITORY"
+          test "$(docker image inspect --format '{{.Id}}' "$LOCAL_IMAGE")" = "$image_id"
+          test "$(docker inspect --format '{{.Image}}' \
+            application-operations-staging-api-1)" = "$image_id"
+          test "$(docker inspect --format '{{.State.Running}} {{.State.Health.Status}}' \
+            application-operations-staging-api-1)" = "true healthy"
+
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+          from urllib.request import urlopen
+
+          def read(port, path):
+              with urlopen(f"http://127.0.0.1:{port}{path}", timeout=10) as response:
+                  assert response.status == 200
+                  return json.load(response)
+
+          for port in (8002, 8003):
+              assert read(port, "/health/ready") == {"status": "ready"}
+
+          version = read(8002, "/version")["version"]
+          if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+              raise SystemExit("Unexpected staging version.")
+
+          ticket = json.loads(Path("backups/rollback-check.json").read_text())["ticket"]
+          assert read(8003, f"/tickets/{ticket['id']}") == ticket
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"version={version}\n")
+          print("Staging release and existing production ticket: checked")
+          PY
+
+          ./scripts/backup_db.sh .env.production application-operations-production
+          printf 'image_id=%s\n' "$image_id" >> "$GITHUB_OUTPUT"
+
+      - name: Promote and verify production
+        env:
+          LOCAL_IMAGE: ${{ steps.release.outputs.local_image }}
+          REGISTRY_IMAGE: ${{ steps.release.outputs.registry_image }}
+          EXPECTED_IMAGE_ID: ${{ steps.checked.outputs.image_id }}
+          EXPECTED_VERSION: ${{ steps.checked.outputs.version }}
+          STAGING_BEFORE: ${{ steps.before.outputs.staging_state }}
+          STAGING_RUN_ID: ${{ inputs.staging_run_id }}
+        run: |
+          cd "$APP_DEPLOY_ROOT"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          test "$(docker image inspect --format '{{.Id}}' "$LOCAL_IMAGE")" = "$EXPECTED_IMAGE_ID"
+          ./scripts/deploy.sh production "$LOCAL_IMAGE"
+
+          test "$(docker inspect --format '{{.Image}}' \
+            application-operations-production-api-1)" = "$EXPECTED_IMAGE_ID"
+          test "$(docker inspect --format '{{.Id}} {{.Image}} {{.State.StartedAt}}' \
+            application-operations-staging-api-1)" = "$STAGING_BEFORE"
+
+          uv run --locked python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from urllib.request import urlopen
+
+          from dotenv import dotenv_values
+
+          def read(port, path):
+              with urlopen(f"http://127.0.0.1:{port}{path}", timeout=10) as response:
+                  assert response.status == 200
+                  return json.load(response)
+
+          for port in (8002, 8003):
+              assert read(port, "/health/ready") == {"status": "ready"}
+              assert read(port, "/version") == {"version": os.environ["EXPECTED_VERSION"]}
+
+          ticket = json.loads(Path("backups/rollback-check.json").read_text())["ticket"]
+          assert read(8003, f"/tickets/{ticket['id']}") == ticket
+          settings = dotenv_values(".env.production", interpolate=False)
+          assert settings["APP_IMAGE"] == os.environ["LOCAL_IMAGE"]
+
+          print("Production image, version, and readiness: passed")
+          print("Original production ticket: all fields unchanged")
+          print("Saved production release: matched")
+          print("Staging readiness passed; its container was not restarted.")
+          PY
+
+          {
+            printf '### Production promotion\n\n'
+            printf 'Staging run: https://github.com/%s/actions/runs/%s\n\n' "$GITHUB_REPOSITORY" "$STAGING_RUN_ID"
+            printf 'Image: %s\n\n' "$REGISTRY_IMAGE"
+            printf 'Version: %s\n\n' "$EXPECTED_VERSION"
+            printf 'Database backup completed before deployment.\n\n'
+            printf 'Readiness passed and the original ticket was preserved.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
