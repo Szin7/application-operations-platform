@@ -83,6 +83,31 @@ On 12 November 2026:
 
 The check covered the current application schema and one demonstration ticket.
 
+## Verified production backup recovery
+
+On 13 November 2026, the backup taken before production promotion was
+restored into a new database in the test PostgreSQL container.
+
+| Item | Verified result |
+| --- | --- |
+| Backup | `backups/20261113T014802Z-JkSafR` |
+| Archive checksum | Passed |
+| Recovery database | `appops_restore_20261113022643` |
+| Migration revision | `0001` |
+| Application account | `appops_test_app` |
+| Recovered ticket count | 1 |
+| Recovered ticket | All returned fields matched the original |
+| Recovered readiness | Passed through FastAPI TestClient |
+| Production containers | Unchanged |
+| Production readiness and original ticket | Passed |
+
+The bootstrap script applied application permissions after restoration.
+Application access used the restricted test account. Production continued
+using its existing database throughout the check.
+
+Local evidence:
+`backups/restore-check-appops_restore_20261113022643.json`.
+
 ## Current limits
 
 Backups remain on the same laptop. Off-machine storage and scheduled backups are not configured.

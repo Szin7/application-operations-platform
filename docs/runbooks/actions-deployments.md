@@ -118,13 +118,41 @@ Application version: `0.1.2`.
 
 Image source commit: `a56088c1b7bbeb049c288095bdd3a25ffdf4715d`.
 
-Registry image:
+Running Docker image ID verified during promotion:
 
 ```text
-ghcr.io/szin7/application-operations-platform@sha256:0e69f74d141520a8aece9600b0ef1ab8b9c07d0ee4d80ac56484a2029d1a5850
+sha256:0e69f74d141520a8aece9600b0ef1ab8b9c07d0ee4d80ac56484a2029d1a5850
 ```
+
+This is the local Docker image ID. The registry reference used for
+deployment is recorded separately in the workflow logs.
 
 The production backup was saved in
 `backups/20261113T014802Z-JkSafR` before deployment.
 
 These environments run locally on the same laptop.
+
+## Verified rejection check
+
+On 13 November 2026, CI run `43349214382` was deliberately supplied
+where the workflow expected a successful staging deployment.
+
+[Run 43351535975](https://github.com/Szin7/application-operations-platform/actions/runs/43351535975)
+failed at **Read the successful staging deployment**, with:
+
+> Choose a successful staging deployment from main.
+
+The failure was expected. Verification confirmed:
+
+- The checkout check passed; backup and deployment steps were skipped.
+- Staging and production API and database containers retained their IDs,
+  images, and start times, and remained healthy.
+- Readiness, versions, the original production ticket, and the saved
+  production release were unchanged.
+- No new backup directories were created.
+
+Local evidence:
+`backups/production-guard-20261113T022057Z-cbf9a69e-result.json`.
+
+This check covers rejection of the wrong workflow type, not every
+possible invalid promotion input.

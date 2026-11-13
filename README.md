@@ -4,6 +4,30 @@ A small service-ticket API for practising application deployment and database op
 
 The application uses FastAPI and PostgreSQL. Docker Compose runs the services, Alembic tracks database changes, and a startup script handles database preparation and migrations.
 
+## Architecture
+
+```mermaid
+flowchart TD
+    Source["GitHub repository"] --> CI["CI checks and image build"]
+    CI --> Registry["GitHub Container Registry"]
+    Registry --> Runner["Local deployment runner"]
+    Runner -->|Manual staging workflow| Staging["Staging API and PostgreSQL"]
+    Staging -->|Release verified| Promotion["Manual production workflow"]
+    Promotion --> Backup["Production database backup"]
+    Backup --> Production["Production API and PostgreSQL"]
+    Staging -->|Metrics| Prometheus["Prometheus"]
+    Production -->|Metrics| Prometheus
+    Prometheus --> Grafana["Grafana"]
+    Prometheus --> Alertmanager["Alertmanager"]
+    Alertmanager --> Receiver["Local notification receiver"]
+```
+
+Staging and production are separate Compose projects on one laptop.
+Production promotion reuses the image verified in staging and creates
+a database backup before deployment.
+
+See the [five-minute demo](docs/demo.md) for a walkthrough and evidence.
+
 ## Current features
 
 - Create and retrieve tickets.
@@ -263,19 +287,26 @@ See [Database backup and restore](docs/runbooks/backup-restore.md) for the proce
 
 ## Project status
 
-Local deployment, database migrations, health checks, automated tests, and database backup and restore have been verified.
+Verified locally:
 
-Authentication is not implemented. The API is currently published on the local loopback address.
+- Application endpoints, migrations, and restricted database access.
+- CI checks, database integration tests, and image publishing.
+- Manual staging deployment and production promotion through Actions.
+- Application rollback and preservation of the original production ticket.
+- Rejection of an invalid promotion before backup or deployment.
+- Production backup recovery into a separate test database, including
+  application access, migration revision, and ticket comparison.
+- Prometheus collection, Grafana, and local firing and recovery notifications.
 
-Staging-to-production promotion and application rollback have been verified.
+### Limits
 
-CI checks, image publishing, and manual promotion of a registry image
-through staging and production have been verified.
+Staging, production, monitoring, and backups share one laptop. This lab
+does not demonstrate high availability or recovery after losing the laptop.
 
-Prometheus collection and the Grafana dashboard have been verified for staging and production.
+Authentication is not implemented. The API uses local loopback addresses.
+Deployments and rollback are manual. Release lookup depends on retained
+GitHub Actions logs.
 
-A staging outage check confirmed that the scrape alert fires and clears after recovery.
-
-Local webhook notification delivery has been verified.
-
-Manual deployment through GitHub Actions has been verified for staging and production. Notifications currently stay on the local machine.
+Backups are local and manually triggered; off-machine storage is not
+configured. Recovery was checked using one demonstration ticket without
+switching production to the recovered database. Notifications remain local.
